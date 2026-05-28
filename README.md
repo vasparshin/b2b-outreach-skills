@@ -1,48 +1,68 @@
 # aictrl Team Skills — Marketing & Sales
 
-Claude Code skills + project configs for the aictrl outreach pipeline (LinkedIn outreach, CRM, prospect research, and email triage/audit/bounce diagnosis). Shared so the team can run the same playbook.
+Claude Code skills + a small helper + cron wrappers for the aictrl outreach pipeline: one **unified CRM**, grade-driven, three daily crons (LinkedIn connect, accept-tracker, email sequence), all **approve-before-send** except the connects. Shared so the team can run the same playbook.
+
+> **See `docs/process-flow.md`** for the end-to-end flow diagram (renders on GitHub).
+
+## The model (read this first)
+
+- **One CRM = the `Log` tab** of the shared sheet. One row per contact — Apollo-sourced (auto-synced) and hand-picked alike. Column blocks:
+  - **A–Q** Apollo state (synced by `aictrl-crm-refresh`; never hand-edit)
+  - **O** `Our Grade` (A/B/C/D) — *the dial that steers every cron* (set by `aictrl-crm-qualify` or by hand)
+  - **R–V** LinkedIn outreach · **W–Z** LinkedIn accept-tracker
+  - **AA–AF** OUR email sequence: `Email Status · Email Step · Email Last Sent · Email Next Due · Email Reply? · Why/Hook`
+- **Grade A = priority.** Connect cron does grade-A leads first (then the Apollo backlog); our email cron emails grade-A only, ≤5/day. B/ungraded are left to Apollo's own sequences (~50/day).
+- **Never double-email:** a row whose `Email Status` starts `skip` (already in an Apollo email sequence) is excluded. If an A-grade lead is in an Apollo sequence but not yet emailed, pull them out of Apollo and run ours instead.
+- **Approve-before-send:** LinkedIn follow-up DMs and all emails are *drafted* to the operator's Telegram DM for approve/edit/skip. Connects are the only auto step.
 
 ## What's here
 
-**`skills/`** — drop into `~/.claude/skills/`:
+**`skills/`** → drop into `~/.claude/skills/`:
 | Skill | What it does |
 |---|---|
-| `aictrl-crm-refresh` | Pulls live Apollo state for H1/H2/H3 sequence contacts into the master CRM (Log tab). |
-| `aictrl-crm-qualify` | Scores each CRM contact A–D into col O (Our Grade). |
-| `aictrl-linkedin-outreach` | Daily LinkedIn connect batch from CRM H1 candidates (auto-scopes to the running operator's Apollo tasks). |
-| `aictrl-linkedin-status-tracker` | Polls pending invites; on accept → runs prospect-research → drafts a personalized message → **operator approves before send**. |
-| `prospect-research` | General engine: person + company → research brief + **ICP-fit verdict** + outreach angle (LinkedIn MCP + Apollo + Firecrawl). |
-| `inbox-triage` | Sorts a mailbox into folders + surfaces tasks (header-based + optional CRM cross-ref). |
-| `reply-audit` | Finds unanswered prospect replies + outreach mis-classifications; drafts replies (never sends). |
-| `bounce-diagnosis` | Parses NDRs (RFC 3463), splits bad-address vs reputation/auth, checks domain SPF/DKIM/DMARC. |
+| `aictrl-crm-refresh` | Upserts live Apollo state for H1/H2/H3 contacts into the Log (non-destructive). |
+| `aictrl-crm-qualify` | Grades each contact A–D into col O. |
+| `aictrl-linkedin-outreach` | Daily connect batch (interactive form). |
+| `aictrl-linkedin-status-tracker` | Polls accepts → researches → drafts follow-up → **approve before send**. |
+| `email-sequencer` | General approval-gated cold-email cadence engine. |
+| `prospect-research` | Person → research brief + ICP-fit verdict + outreach angle. |
+| `outreach-copy-review` | Critiques a draft vs the research + intended outcome; flags slop/unverifiable claims. |
+| `inbox-triage` / `reply-audit` / `bounce-diagnosis` | Inbox sort / unanswered-reply audit / NDR diagnosis. |
 
-**`project-config/`** — drop into `<your-aictrl-project>/.claude/`: per-project config the general engines read (`inbox-triage.md`, `reply-audit.md`, `bounce-diagnosis.md`, `prospect-research.md`).
+**`scripts/aictrl-sheets.py`** → `~/.claude/scripts/`. The CRM helper: direct Google Sheets API (works in a headless cron, unlike the Sheets MCP). Subcommands: `candidates` (connect, grade-A first then Apollo), `pending`/`track-update` (accepts), `due-steps`/`email-update` (email).
 
-## Prerequisites (connect with YOUR OWN accounts)
+**`crons/`** → `~/.claude/scripts/`. The three wrappers (`aictrl-linkedin-cron.sh` 10:00, `aictrl-linkedin-tracker-cron.sh` 10:15, `aictrl-email-sequence-cron.sh` 10:30). Each runs `claude -p` headless with a scoped `--allowedTools` (NO send tools — sends stay behind your approval) and posts results/drafts to your Telegram DM.
 
-These skills orchestrate MCP servers — you need them configured in your Claude Code:
-- **LinkedIn** — `linkedin-scraper-mcp` (run `uvx linkedin-scraper-mcp@latest --login` once).
-- **Apollo.io** — the Apollo MCP, logged into your Apollo account.
-- **Mail** — Microsoft 365 (`@softeria/ms-365-mcp-server`) or a Gmail MCP, for inbox-triage / reply-audit / bounce-diagnosis.
-- **Google Workspace** — Sheets/Drive (for the CRM).
-- **Firecrawl** — web search, for prospect-research.
+**`project-config/`** → `<your-aictrl-project>/.claude/`. Per-project config the engines read.
 
 ## Install
 
 1. `cp -r skills/* ~/.claude/skills/`
-2. `cp project-config/* <your-aictrl-project>/.claude/`
-3. Restart Claude Code so the skills load. Trigger with `/skill-name` or natural language.
+2. `cp scripts/* ~/.claude/scripts/ && chmod +x ~/.claude/scripts/*.sh ~/.claude/scripts/aictrl-sheets.py`
+3. `cp project-config/* <your-aictrl-project>/.claude/`
+4. Add the three cron lines (weekdays) — `crontab -e`:
+   ```
+   0  10 * * 1-5 ~/.claude/scripts/aictrl-linkedin-cron.sh          >> ~/.claude/logs/aictrl-linkedin-cron-wrapper.err 2>&1
+   15 10 * * 1-5 ~/.claude/scripts/aictrl-linkedin-tracker-cron.sh  >> ~/.claude/logs/aictrl-linkedin-tracker-wrapper.err 2>&1
+   30 10 * * 1-5 ~/.claude/scripts/aictrl-email-sequence-cron.sh    >> ~/.claude/logs/aictrl-email-sequence-wrapper.err 2>&1
+   ```
+5. Restart Claude Code so the skills load.
 
-## ADAPT these per operator (search-and-replace before first run)
+## ⚙️ ADAPT THESE before first run (the scripts carry Vas's values)
 
-The files carry the original operator's values. Change:
-- **Telegram DM chat_id** — currently `6348453236` (Vas's DM). Set to *your* DM chat_id.
-- **Telegram token file** — `/home/vas/projects/aictrl/.telegram/.env` → your path.
-- **Any `/home/vas/...` absolute paths** → your home / project paths.
-- **Apollo** — no change needed: `aictrl-linkedin-outreach` auto-scopes to whoever's logged in (`apollo_users_api_profile`), so it only touches *your* contacts.
+In **`scripts/aictrl-sheets.py`**:
+- `CREDS` path → your own google-workspace-mcp OAuth creds file (must have **edit access to the shared sheet** — ask Vas to share it with your Google account).
+- `VAS_USER_ID` → **your** Apollo user_id (from `apollo_users_api_profile`); this scopes the connect queue to *your* Apollo tasks.
+- `SID` (spreadsheet) + the H1/H2/H3 `SEQS` → **keep as-is** (shared team CRM + sequences).
 
-**Keep these as-is** (shared pipeline): the CRM spreadsheet ID and the H1/H2/H3 sequence IDs — they're the same team workspace.
+In **`crons/*.sh`**:
+- All `/home/vas/...` paths → your home/project paths.
+- `CHAT_ID="6348453236"` → **your** Telegram DM chat_id.
+- `"Vas Parshin"` sender label (connect cron) → your name.
+- The MS365 sender (email cron prompt, `vas@aictrl.dev`) → your aictrl address.
+
+Prereqs (your own accounts): LinkedIn MCP (`uvx linkedin-scraper-mcp@latest --login`), Apollo MCP, MS365 (`@softeria/ms-365-mcp-server`), Google Workspace MCP, Firecrawl.
 
 ## Security
 
-No secrets are committed — the skills read `~/.claude/secrets.env` (Apollo key) and `.telegram/.env` (Telegram token) from your own machine at runtime. Never commit those files. Keep this repo private.
+No secrets are committed — scripts read `~/.claude/secrets.env` (Apollo key), `.telegram/.env` (Telegram token), and the GWS creds file from your own machine at runtime. The crons deliberately exclude all *send* tools so nothing is sent without your Telegram approval. Keep this repo private.
