@@ -70,12 +70,11 @@ Call `apollo_users_api_profile` with `include_credit_usage: true`.
 
 ### 2. Read existing CRM rows
 
-Call `mcp__google_workspace__read_sheet_values`:
-- `user_google_email`: `Info@boller.store`
-- `spreadsheet_id`: master CRM id
-- `range_name`: `Log!A2:V10000` (or `Log_v2!A2:V10000` pre-rename)
+**Truncation gotcha (fleet-wide, see `~/.claude/context/mcps.md`):** `read_sheet_values` silently truncates its returned row content to the first 50 rows of any range, no matter how large the range or how many rows it reports having read. A single `Log!A2:V10000` call only ever surfaces rows 2–51 to the model — everything past row 51 is invisible even though the tool claims success. Confirmed 2026-07-27 against this exact spreadsheet.
 
-Build an in-memory map: `apollo_contact_id → row_number` for upserts. For rows where col I is blank, key by LinkedIn slug (col H) as a fallback — this is how the 25 migrated LinkedIn rows get matched once Apollo gives us their contact_ids.
+Read in `<=50`-row windows and accumulate instead: `Log!A2:V51`, `Log!A52:V101`, `Log!A102:V151`, ... up through the sheet's current last row (check via `get_spreadsheet_info` — do not assume the old ~3,000 row count still holds). Build the `apollo_contact_id → row_number` map incrementally as each window comes back, rather than issuing one big read and trusting it covers everything.
+
+For rows where col I is blank, key by LinkedIn slug (col H) as a fallback — this is how the 25 migrated LinkedIn rows get matched once Apollo gives us their contact_ids.
 
 ### 3. Pull active contacts from H1+H2+H3
 

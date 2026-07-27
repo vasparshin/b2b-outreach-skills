@@ -35,6 +35,14 @@ Grades each contact in the master CRM `Log` tab on H1 fit + engagement, writing 
 
 **Canonical reference:** Google Doc "aictrl — CRM Grading Rubric" at https://docs.google.com/document/d/110fgpf8rBfePQ_Xx_lqJiq_Z1zkajSsbSaWzDRhaHjc/edit (lives in the `outreach/` Drive folder shared with Bulat). Edit there when ICP / weights change. The Doc + sheet tabs are the source of truth; the algorithm below is just the executor.
 
+## Ideal Customer Profile (corrected 2026-06-02 — READ FIRST)
+
+aictrl is **NOT** for AI-first companies or AI power users. They already understand AI coding agents and have their own governance figured out — they will not buy, and approaching them wastes outreach.
+
+**TARGET (score company fit HIGH):** traditional / old-school software shops; enterprises on legacy stacks; companies in slow-moving, regulated, or niche industries (banking, insurance, manufacturing, logistics, healthcare, telecom, public sector); teams *just starting* with AI in software development who do not yet have a governance story. They adopt AI coding tools but lack the in-house expertise to keep agents under control — they NEED a leash.
+
+**ANTI-ICP (auto-disqualify → D):** AI-first / "AI-native" companies; developer-tooling vendors; teams that publicly host AI/Claude Code events, run an "AI Ops" guild / AI Days, build AI tooling (e.g. an LLM framework or an MCP), demo/teach AI coding publicly, or won an AI showcase. These were exactly what the old prospecting surfaced — they are the OPPOSITE of fit. See [[project_icp_correction]].
+
 Four dimensions, blended into a final letter grade. Each dimension scored 0–3.
 
 ### 1. Title fit (weight 20%)
@@ -43,11 +51,17 @@ Four dimensions, blended into a final letter grade. Each dimension scored 0–3.
 
 There is no tier 0 for title — empty/unknown titles default to 1, never disqualifying.
 
-### 2. Company fit (weight 30%) — placeholder
+### 2. Company fit (weight 30%) — ICP company-type
 
-**Currently unimplemented.** Apollo's contacts_search returns `organization_name` only — no industry / size / funding-stage. To make this dimension live we'd need `apollo_organizations_enrich` data pulled into the CRM (a separate one-time backfill, costs Apollo lead credits per company so worth deferring until ROI is clear).
+This dimension now encodes the [[project_icp_correction]] ICP above. It is the primary lever for steering away from AI-first companies toward traditional/lagging adopters.
 
-Placeholder behaviour: this dimension scores **1 (low) for every row** until enrichment lands. Setting it to 1 (rather than 2 = medium) keeps the A tier scarce — A's are reserved for contacts with a real engagement signal, not just "everyone with a good title at a UK company". When enrichment is wired, switch the placeholder to live tab lookups against a new `Fit_Companies` tab.
+**Scoring (judge from company name + title + any known context; use the `--with-llm` Haiku step to classify when the name alone is ambiguous):**
+- **0 (ANTI-ICP → auto-D):** AI-first / AI-native company, developer-tooling / LLM-infra vendor, or a contact whose public signal is AI thought-leadership (hosts AI/Claude Code events, builds AI tooling, ran an AI Ops guild / AI Days, launched an MCP, won an AI showcase). These are disqualified regardless of title fit.
+- **3 (high):** clearly traditional / legacy-stack / slow-moving or regulated industry (banking, insurance, manufacturing, logistics, healthcare, telecom, public sector, retail), or a company plausibly *early* in AI adoption with no governance story.
+- **2 (medium):** ordinary B2B software company with no strong signal either way.
+- **1 (low):** unknown / cannot classify.
+
+When `--with-llm` is set, classify ambiguous companies against the ICP definition above (target vs anti) before scoring. A confident ANTI-ICP classification sets this dimension to 0 → auto-D. A future `Fit_Companies` tab (enriched industry/size) can replace the heuristic with a lookup, but the ICP polarity (anti = 0, traditional = 3) stays the same.
 
 ### 3. Location fit (weight 20%)
 
@@ -95,12 +109,9 @@ Verify the spreadsheet is reachable and the header row matches the 26-col schema
 
 ### 2. Read all rows
 
-Call `mcp__google_workspace__read_sheet_values`:
-- `user_google_email`: `Info@boller.store`
-- `spreadsheet_id`: the constant above
-- `range_name`: `Log!A2:Z10000`
+**Truncation gotcha (fleet-wide, see `~/.claude/context/mcps.md`):** `read_sheet_values` silently truncates its returned row content to the first 50 rows of any range, no matter how large the range or how many rows it reports having read. A single `Log!A2:Z10000` call only ever surfaces rows 2–51 to the model. Confirmed 2026-07-27 against this exact spreadsheet.
 
-For each row track its sheet row number as `array_index + 2`.
+Read in `<=50`-row windows and accumulate instead: `Log!A2:Z51`, `Log!A52:Z101`, ... up through the sheet's current last row (check via `get_spreadsheet_info`, don't assume a stale row count). Track each row's sheet row number as `array_index + 2` (offset by the window's start) and build the full gradable-rows set incrementally across windows.
 
 ### 3. Filter to gradable rows
 
