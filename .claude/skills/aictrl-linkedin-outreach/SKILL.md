@@ -23,6 +23,7 @@ You are running the autonomous daily LinkedIn-connect batch for the **aictrl** o
 | Note parameter | **omit** (workaround for bug stickerdaniel/linkedin-mcp-server#455) |
 | Sender name to log | `Vas Parshin` |
 | Telegram DM chat_id | `6348453236` (NOT group — see `feedback_no_group_posts_without_instruction.md`) |
+| Apollo enrollment status | **PAUSED as of 2026-07-01** (operator directive: focus on LinkedIn, revisit email/Apollo automation later). While paused, new CRM imports are NOT being enrolled into Apollo sequences, so Apollo's task queue will legitimately return zero `linkedin_step_connect` tasks even when good candidates exist in the CRM. Source directly from the CRM (Step 5 CRM-direct path) as PRIMARY until Vas says Apollo enrollment has resumed — do not treat "zero Apollo tasks" as "zero candidates." |
 
 ## Sheet schema (26 columns A–Z — owned by which skill)
 
@@ -59,15 +60,11 @@ The LinkedIn MCP has the known bug #455 (note path broken). Poll PyPI to detect 
 KNOWN_BUGGY_VERSION="4.13.0"
 LATEST=$(curl -s https://pypi.org/pypi/linkedin-scraper-mcp/json | jq -r '.info.version')
 if [ "$LATEST" != "$KNOWN_BUGGY_VERSION" ]; then
-  TOKEN=$(grep -E "^TELEGRAM_BOT_TOKEN|^TOKEN|^BOT_TOKEN" /home/vas/projects/aictrl/.telegram/.env | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
-  MSG="🔔 linkedin-scraper-mcp PyPI version is now ${LATEST} (was pinned at ${KNOWN_BUGGY_VERSION}). Verify bug #455 fix is in this release, then update SKILL.md to re-enable note-sending in Step 6 and bump KNOWN_BUGGY_VERSION."
-  curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
-    -H "Content-Type: application/json" \
-    -d "$(jq -nc --arg chat "6348453236" --arg text "$MSG" '{chat_id: ($chat | tonumber), text: $text, disable_web_page_preview: true}')" >/dev/null
+  echo "PYPI_VERSION_ALERT: linkedin-scraper-mcp PyPI version is now ${LATEST} (was pinned at ${KNOWN_BUGGY_VERSION}). Verify bug #455 fix is in this release, then update SKILL.md to re-enable note-sending in Step 6 and bump KNOWN_BUGGY_VERSION."
 fi
 ```
 
-Non-blocking — continue regardless.
+Non-blocking — continue regardless. Do NOT curl the Telegram Bot API here (fleet-wide cron rule — see Step 9). Print the alert line to stdout only; if it needs to reach Vas immediately rather than waiting for the next Step 9 summary, that is a wrapper-level enhancement, not something this skill should do itself.
 
 ### 2. Preflight: Apollo account check + capture operator user_id
 
@@ -81,12 +78,14 @@ For Vas (the canonical operator), `id` should equal `69fc6082065486001538f103`. 
 
 Call `mcp__linkedin__get_my_profile`. If error contains "No valid LinkedIn session was found": ABORT with `ABORT: LinkedIn MCP session expired. Run \`uvx linkedin-scraper-mcp@latest --login\` in a terminal, sign in, then retry.`
 
-### 4. Pull Apollo scheduled LinkedIn tasks (the queue)
+### 4. Pull Apollo scheduled LinkedIn tasks (the queue) — SKIP while Apollo enrollment is paused
 
-Apollo's task queue is the authoritative source of "who should we LinkedIn-connect next" — every contact in H1/H2/H3 has a scheduled `linkedin_step_connect` task with a `due_at` set by Apollo's sequence pacing. Pull these via the REST API (the MCP wrapper doesn't expose this endpoint):
+**Check the "Apollo enrollment status" constant above first.** While it says PAUSED: skip this entire step (don't bother calling the Apollo tasks API — it will legitimately return zero, and that is NOT the same as "no candidates") and go straight to Step 5, which sources directly from the CRM as the PRIMARY path in that mode. Re-enable this step as primary once Vas confirms Apollo enrollment has resumed.
+
+When Apollo enrollment is active, its task queue is the authoritative source of "who should we LinkedIn-connect next" — every contact in H1/H2/H3 has a scheduled `linkedin_step_connect` task with a `due_at` set by Apollo's sequence pacing. Pull these via the REST API (the MCP wrapper doesn't expose this endpoint):
 
 ```bash
-source ~/.claude/secrets.env  # loads APOLLO_API_KEY (master key)
+eval "$(~/bin/secrets-env --export)"  # loads APOLLO_API_KEY (master key; plaintext secrets.env was retired 2026-07-23, encrypted store only)
 curl -s -X POST 'https://api.apollo.io/api/v1/tasks/search' \
   -H "X-Api-Key: $APOLLO_API_KEY" -H 'Content-Type: application/json' -H 'Cache-Control: no-cache' \
   --data '{
@@ -119,16 +118,29 @@ The user_id filter is critical: if Vas's LinkedIn skill fires connects for conta
 
 Apollo's REST API does NOT honour the `task_user_ids` query parameter for master keys (confirmed by testing — it returns identical totals regardless of filter value). So we filter client-side after fetching.
 
-If the API call fails (network, 401, etc.) — fall back to the legacy "read CRM and pick by date" path so the cron doesn't die: read `Log!A2:Z10000`, filter to rows where `K contains "H1"` AND `R empty` AND `H non-empty` AND `S not "sent*"`, sort by `P desc → A desc`, take top 15. Mark in the run summary that we fell back.
+If the API call fails (network, 401, etc.) while Apollo enrollment is otherwise active — fall back to the CRM-direct path below so the cron doesn't die. Mark in the run summary that we fell back.
 
-### 5. Read CRM and match Apollo tasks to rows
+### 5. Read CRM candidates — PRIMARY path while Apollo is paused, fallback path otherwise
 
-Call `mcp__google_workspace__read_sheet_values`:
-- `user_google_email`: `Info@boller.store`
-- `spreadsheet_id`: the constant above
-- `range_name`: `Log!A2:Z10000`
+**CRM-direct sourcing (use this whenever Step 4 was skipped or failed):**
 
-Build a lookup map: `apollo_contact_id (col I, index 8) → sheet_row_number`. Then walk the Apollo tasks list IN ORDER (already due_at asc) and match each task to its CRM row:
+Call `mcp__google_workspace__read_sheet_values` with a narrow index slice first — do NOT pull all 26 columns for all rows.
+
+**Truncation gotcha (fleet-wide, see `~/.claude/context/mcps.md`):** even a thin one-column read of `Log!H2:H10000` silently truncates its returned content to the first 50 rows regardless of range size or reported row count — a single big call only ever surfaces rows 2–51. Confirmed 2026-07-27. Read each of the four thin columns (`H` slug, `K` Apollo Sequence, `O` Our Grade, `R` Connect Date) in `<=50`-row windows — `H2:H51`, `H52:H101`, ... — and accumulate across windows instead of trusting one `...2:...10000` call.
+
+Find candidate row numbers (`array_index + 2`) where:
+- col H (slug) is non-empty, AND
+- col R (Connect Date) is empty, AND
+- col K contains "H1"/"H2"/"H3" **OR** col K is blank (freshly-imported contacts not yet enrolled in a sequence — expected while Apollo is paused), AND
+- col O (Our Grade) is "A" or "B" if populated (prioritize these); if col O is blank, include but rank after graded rows.
+
+Sort: Grade A first, then Grade B, then ungraded, then by row number ascending within each group (oldest imports first). Take top 15.
+
+Only THEN do a second, targeted read of just those matched rows' full data (name/title/company/slug — `Log!B<row>:H<row>` per row, or a batch covering the contiguous block if the matches cluster together) to build the candidate list. Never re-read the whole sheet just to hydrate a handful of rows.
+
+**Apollo-task-matching (use this only when Step 4 actually ran, i.e. Apollo enrollment is active):**
+
+Build a lookup map: `apollo_contact_id (col I, index 8) → sheet_row_number` from a targeted read of the CRM. Then walk the Apollo tasks list IN ORDER (already due_at asc) and match each task to its CRM row:
 
 - If task.contact_id is NOT in the CRM map: skip (contact not yet imported — next CRM refresh will pick them up).
 - If matched but col R (index 17) is non-empty: skip — already LinkedIn-connected, Apollo's task is stale.
@@ -136,7 +148,7 @@ Build a lookup map: `apollo_contact_id (col I, index 8) → sheet_row_number`. T
 - If matched but col S (index 18) starts with "sent": skip — defensive.
 - Otherwise: include as a candidate, carrying through the slug from col H, the row number, AND the Apollo task ID (for Step 7b).
 
-Slice to top 15 (or fewer). If empty, print `No new LinkedIn-step-connect tasks today.` and skip to Step 8.
+Slice to top 15 (or fewer). If empty, print `No new candidates today.` and skip to Step 8.
 
 ### 6. Send each connect, prepare row updates
 
@@ -155,13 +167,15 @@ For each candidate, write to that specific row's cols R:X via `modify_sheet_valu
 - `range_name`: `Log!R<row_number>:X<row_number>`
 - `values`: `[[<R>, <S>, <T>, <U>, <V>, <W>, <X>]]`
 
-Optimization: if multiple updates land on contiguous rows, batch them. Otherwise, do individual writes — 15 is small.
+Write one range per row, always. Do NOT batch several rows into one range, even when they are adjacent: if a single row in that span is missing from your update list, every value below it lands one row too high and the sheet still looks well-formed. That is exactly how the 2026-05-21 CRM import put seven contacts' email addresses on the wrong people (found and fixed 2026-07-29; see the batched-write section of `aictrl-crm-refresh`). At 15 rows there is nothing to optimise here anyway.
 
 **CRITICAL:** never write to cols A–Q (Apollo-owned), col O (Our Grade), or cols Y–Z (tracker-owned). The range must be exactly `R<n>:X<n>`.
 
-### 7b. Mark Apollo task complete (best-effort)
+### 7b. Mark Apollo task complete (best-effort, ONLY for Apollo-task-matched candidates)
 
-For each candidate whose connect was `connected` (NOT `connect_unavailable` — those tasks should stay scheduled so we can retry later), call Apollo's update-task endpoint to mark it completed:
+Skip this step entirely for candidates sourced via CRM-direct (Step 5's primary path while Apollo is paused) — they have no Apollo task ID to mark complete.
+
+For each Apollo-task-matched candidate whose connect was `connected` (NOT `connect_unavailable` — those tasks should stay scheduled so we can retry later), call Apollo's update-task endpoint to mark it completed:
 
 ```bash
 curl -s -X PUT "https://api.apollo.io/api/v1/tasks/${TASK_ID}" \
@@ -182,28 +196,11 @@ Other / failed: <N> — total attempts: <N>/15
 Log: https://docs.google.com/spreadsheets/d/1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ/edit
 ```
 
-### 9. DM summary to operator (Vas)
+### 9. Do NOT post to Telegram yourself
 
-POST the same four-line summary to DM `6348453236` (NOT to the group `-5110011669`). Per `feedback_no_group_posts_without_instruction.md`, daily auto-broadcasts to the group are forbidden.
+Per the fleet-wide cron rule (`~/.claude/context/operations.md`): this skill prints Step 8's four-line summary to stdout ONLY. It must never call the Telegram Bot API, curl `api.telegram.org`, or source `.telegram/.env` — the cron WRAPPER (`aictrl-linkedin-cron.sh`) is solely responsible for parsing that stdout and delivering exactly one DM to `6348453236`. (Fixed 2026-07-24: this step used to also POST directly, causing a duplicate notification alongside the wrapper's own guaranteed-delivery send — see `feedback-cron-telegram-isolation` memory / operations.md.)
 
-```bash
-TOKEN=$(grep -E "^TELEGRAM_BOT_TOKEN|^TOKEN|^BOT_TOKEN" /home/vas/projects/aictrl/.telegram/.env | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
-SUMMARY=$(cat <<'EOF'
-🤖 H1 LinkedIn batch — <UTC date>
-Sent: <N>
-connect_unavailable: <N>
-Other / failed: <N> — total attempts: <N>/15
-Log: https://docs.google.com/spreadsheets/d/1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ/edit
-EOF
-)
-curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
-  -H "Content-Type: application/json" \
-  -d "$(jq -nc --arg chat "6348453236" --arg text "$SUMMARY" '{chat_id: ($chat | tonumber), text: $text, disable_web_page_preview: true}')" >/dev/null
-```
-
-If the run produced no candidates (Step 5 exited early), still POST: `🤖 H1 LinkedIn batch — <UTC date>: no new candidates today.` to DM `6348453236`.
-
-Treat curl failure as non-fatal — the sheet is the authoritative record.
+If the run produced no candidates (Step 5 exited early), still print `Sent: 0 / connect_unavailable: 0 / Other / failed: 0 — total attempts: 0/15` (or equivalent) so the wrapper has a summary to parse — do not send anything yourself.
 
 ## Known issues — read once at startup
 
