@@ -39,7 +39,7 @@ Same split as Vas's fork: verification/lookup work (profile fetch, still-message
 
 ## Why a formula-based read for the eligible-rows query
 
-Same 3,000+ row / 50-row-display caveat as Vas's fork applies identically here — push the filter into a `QUERY()` formula on a scratch cell rather than a raw wide read. **Do not reuse `AK1` as the scratch cell** — that's already claimed by Vas's `aictrl-linkedin-followup2` (confirmed-safe scratch range `AK1` onward as of 2026-07-24). Since this sheet needs resizing past column AN anyway for the AO–AW columns this whole Bulat fork depends on (see `aictrl-linkedin-outreach-bulat`'s Setup step 6), pick a scratch cell **beyond AW** once the resize happens (e.g. `AY1`) — confirm it's empty with a `read_sheet_values` check immediately before every use, same discipline as Vas's fork, and clear it immediately after reading the result.
+Same 3,000+ row / 50-row-display caveat as Vas's fork applies identically here — push the filter into a `QUERY()` formula on a scratch cell rather than a raw wide read. **Do not reuse `AK1` as the scratch cell** — that's already claimed by Vas's `aictrl-linkedin-followup2` (confirmed-safe scratch range `AK1` onward as of 2026-07-24). The sheet has been resized (74 columns through BV as of 2026-08-01), and AU–AW belong to this skill per the column map in /home/vas/projects/aictrl/CLAUDE.md. Pick a scratch cell in the free strip **AX–AZ** (e.g. `AY1`; BA–BB are owned by the follow-up approval queue — not scratch) — confirm it's empty with a `read_sheet_values` check immediately before every use, same discipline as Vas's fork, and clear it immediately after reading the result.
 
 ## Workflow
 
@@ -71,7 +71,7 @@ Slice to first `send_cap=5`.
 Post to Bulat's DM chat_id (never the group):
 
 ```
-📨 LinkedIn second-touch draft — [Name], [Company]
+LinkedIn second-touch draft — [Name], [Company]
 
 Original InMail sent: [date from AP]
 Draft nudge:
@@ -98,7 +98,7 @@ Batch-write `Log!AU<row>:AW<row>`.
 ### 7. DM summary
 
 ```
-🤖 Bulat's LinkedIn second-touch — <UTC date>
+Bulat's LinkedIn second-touch — <UTC date>
 Eligible pool: <N>
 Nudged: <N>
 Skipped: <N>

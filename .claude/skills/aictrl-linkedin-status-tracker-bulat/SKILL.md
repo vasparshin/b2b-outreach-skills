@@ -47,7 +47,9 @@ Call `mcp__linkedin__get_my_profile` against Bulat's LinkedIn MCP server. Abort 
 
 ### 2. Reply scan — the primary purpose of this skill
 
-Read `Log!AO2:AO10000` (thin index) to find rows where **col AO = "sent"** (InMail was sent by Bulat's outreach skill). For each match, hydrate `B` (name), `H` (slug), `AR` (existing reply status — skip if already `interested`/`question`/`rejected`, only re-check rows where AR is empty or `none`, capped at 20/run to bound inbox scan cost).
+Read col `AO` as a thin index to find rows where **col AO = "sent"** (InMail was sent by Bulat's outreach skill).
+
+**Superseded 2026-08-03 — read it in ONE call via `python3 ~/.claude/scripts/sheets-read.py 1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ 'Log!A2:AO3100' info@boller.store --json` and filter in Python.** Windowing is correct but expensive; the fleet measured 1.28bn cache-read tokens and 48% of a day's spend from this pattern on 2026-08-03. Legacy fallback only if the script is unavailable — read it in `<=50`-row windows, `AO2:AO51`, `AO52:AO101`, ..., and accumulate (that windowing fix was itself added 2026-07-31).** This step previously said `Log!AO2:AO10000` as a single call. `read_sheet_values` truncates its returned content to the first 50 data rows of any range regardless of size, so that only ever surfaced sheet rows 2–51 while appearing to scan the whole column. Note step 3 below already carried this windowing guard — it was applied there on 2026-07-27 and this step was missed in the same pass, so the skill has been half-fixed since then. For each match, hydrate `B` (name), `H` (slug), `AR` (existing reply status — skip if already `interested`/`question`/`rejected`, only re-check rows where AR is empty or `none`, capped at 20/run to bound inbox scan cost).
 
 1. Call `mcp__linkedin__get_inbox` (Bulat's session).
 2. For each conversation where the last message is **not** from Bulat's own name (i.e. they replied):
@@ -59,7 +61,7 @@ Read `Log!AO2:AO10000` (thin index) to find rows where **col AO = "sent"** (InMa
 
 ### 3. Connect-request fold-in acceptance poll (secondary, copy of Vas's tracker logic scoped to Bulat's rows)
 
-Read `Log!W2:W10000` and `Log!U2:U10000` (thin index). Find rows where `U="Bulat"` AND `W="pending"`. Cap at 20/run, oldest-R first. For each, call `mcp__linkedin__get_person_profile` and classify exactly as Vas's tracker does (`· 1st`/`Connected` → accepted; `Pending` → still pending; `Connect` + >21 days since R → withdrawn/expired; otherwise still pending). Write back `W<row>:X<row>` only.
+**Truncation gotcha (fleet-wide, see `~/.claude/context/mcps.md`):** `read_sheet_values` silently truncates its returned content to the first 50 rows of any range regardless of size or reported row count — a single `Log!W2:W10000`-style call only ever surfaces rows 2–51. Confirmed 2026-07-27 on Vas's tracker; same read pattern, same bug, applies here identically. Read `W` and `U` in ONE call via `python3 ~/.claude/scripts/sheets-read.py 1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ 'Log!A2:W3100' info@boller.store --json` and filter in Python (superseded the windowed read on 2026-08-03 — same cost reason as step 2; legacy fallback is `W2:W51`/`U2:U51`, `W52:W101`/`U52:U101`, ... accumulated). Find rows where `U="Bulat"` AND `W="pending"`. Cap at 20/run, oldest-R first. For each, call `mcp__linkedin__get_person_profile` and classify exactly as Vas's tracker does (`· 1st`/`Connected` → accepted; `Pending` → still pending; `Connect` + >21 days since R → withdrawn/expired; otherwise still pending). Write back `W<row>:X<row>` only.
 
 **No follow-up send is triggered on acceptance here** — unlike Vas's pipeline, Bulat's first-touch message already went out via InMail regardless of connection state, so there's nothing further to fire when the fold-in connect gets accepted. This step exists purely to keep W/X accurate for Bulat's rows.
 
@@ -72,12 +74,12 @@ Batch-write `Log!AR<row>:AS<row>` for reply-scan results, and separately `Log!W<
 POST to Bulat's DM chat_id (never the group):
 
 ```
-🤖 Bulat's LinkedIn tracker — <UTC date>
+Bulat's LinkedIn tracker — <UTC date>
 InMail replies found: <N> (<N> interested/question, <N> rejected, <N> other)
 Connect fold-in polled: <N> — accepted: <N>, still pending: <N>, withdrawn/expired: <N>
 ```
 
-For each interested/question reply: `💬 Reply from [Name] ([Company]): "[quote]" → needs a response, handle manually.`
+For each interested/question reply: `Reply from [Name] ([Company]): "[quote]" → needs a response, handle manually.`
 
 ## Failure-mode quick reference
 

@@ -30,7 +30,7 @@ Same as before — nothing here has changed from the prior fork:
 3. Register a SEPARATE MCP server entry (never reuse Vas's `linkedin` entry). This skill's tool calls assume an MCP server named `linkedin` inside Bulat's own Claude Code project/session — if he's instead added as a second identity inside Vas's `aictrl` session, the server needs a distinct name and every `mcp__linkedin__*` call in this file needs updating to match.
 4. Verify with `--status`.
 5. **NEW — confirm InMail credits exist.** Once logged in, have Bulat check his own LinkedIn Premium account for available InMail credits (Settings → Premium features, or just note the credit count shown when composing a message to a non-connection in the LinkedIn UI). If he has zero credits or Premium doesn't include InMail on his plan, Step 3b below will fail at the first live send and this skill's InMail step needs to be paused until credits are available — the connect-request fold-in still works regardless.
-6. **NEW — sheet resize required.** This skill owns new columns AO–AQ (see schema below), which are past the current sheet's column cap. Followup2's scratch-cell note records the grid capping at column AN (40 columns) as of 2026-07-24. Someone with edit access must extend the `Log` tab to at least column AQ (`resize_sheet_dimensions` or manually via the Sheets UI) before this skill's write-back step will succeed. **This has not been done — do not run Step 7 until it has.**
+6. **Sheet resize — DONE (2026-08-01 check).** This skill owns columns AO–AQ (see schema below). The `Log` grid is now 74 columns through BV, so the old ‘grid caps at AN’ blocker no longer applies and AO–AS are allocated to this skill + the Bulat tracker in the authoritative column map in /home/vas/projects/aictrl/CLAUDE.md. No resize action needed before Step 7.
 7. Bulat's own Apollo identity confirmed — auto-captured at Step 2 below, same mechanism as before, no code change needed.
 
 None of the above has been done — this remains a documentation/package prep task, not a live setup.
@@ -88,7 +88,11 @@ Identical to the prior fork's Steps 2–3: call `apollo_users_api_profile`, veri
 
 ### 2. Read CRM candidates scoped to Bulat
 
-Same thin-index-then-hydrate pattern as the other skills (never a full `A:Z` read on 3,000+ rows). Read `Log!H2:H10000` (slug), `Log!K2:K10000` (sequence), `Log!O2:O10000` (grade), `Log!AO2:AO10000` (this skill's own gate column — the InMail dedup key, NOT col R). Filter to rows where col H is non-empty, **col AO is empty** (not yet InMail'd by this skill), col K matches H1/H2/H3 or blank, and Apollo-task scoping (see prior fork's Step 4) confirms the row belongs to Bulat's Apollo user_id. Prioritize Grade A then B then ungraded. Take top 10, hydrate only matched rows (name, title, company, slug, apollo_contact_id).
+Same thin-index-then-hydrate pattern as the other skills (never a full `A:Z` read on 3,000+ rows).
+
+**Truncation gotcha — read these in `<=50`-row windows, NOT as single ranges (fixed 2026-07-31).** `read_sheet_values` silently truncates its returned content to the first 50 data rows of any range, regardless of range size or the row count it reports. Narrowing to one column does NOT help — the limit is on rows, not width. **Superseded 2026-08-03 — do NOT window, use the REST route.** Windowing is correct but costs ~60 tool calls per column, each carrying the whole conversation context (fleet measurement that day: 1.28bn cache-read tokens and 48% of a day's spend from exactly this pattern). Call the shared reader once for all four columns at once and filter in Python: `python3 ~/.claude/scripts/sheets-read.py 1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ 'Log!A2:AO3100' info@boller.store --json` — verified against this spreadsheet, 3,035 rows in one call, no truncation, and a non-zero exit means "could not read" rather than "empty". Legacy fallback only if the script is unavailable: loop `Log!H<start>:H<start+49>` for `start = 2, 52, 102, ...` up through the sheet's last row and accumulate, and the same for `K`, `O` and `AO`. This step previously specified `Log!H2:H10000`, `Log!K2:K10000`, `Log!O2:O10000` and `Log!AO2:AO10000` as single calls, which meant it only ever saw sheet rows 2–51 — about 1.6% of a 3,000-row CRM — while appearing to have scanned everything. The fleet-wide fix on 2026-07-27 was applied to Vas's skills but this fork was missed; see `~/.claude/context/mcps.md`.
+
+Read the four thin index columns: `H` (slug), `K` (sequence), `O` (grade), `AO` (this skill's own gate column — the InMail dedup key, NOT col R). Filter to rows where col H is non-empty, **col AO is empty** (not yet InMail'd by this skill), col K matches H1/H2/H3 or blank, and Apollo-task scoping (see prior fork's Step 4) confirms the row belongs to Bulat's Apollo user_id. Prioritize Grade A then B then ungraded. Take top 10, hydrate only matched rows (name, title, company, slug, apollo_contact_id).
 
 **Col AO empty is the dedup key for this skill — not col R.** Col R tracks the connect-request fold-in (shared with Vas), which is a separate, non-blocking side effect. A row can have R filled (already connected, e.g. by Vas) and AO empty (never InMail'd by Bulat) — that's fine, still process it.
 
@@ -111,7 +115,7 @@ Same voice rules as `aictrl-linkedin-followup` Step 4 (genuine opener, "I'm on t
 Post to Telegram DM **[BULAT'S chat_id — placeholder]** (never the group):
 
 ```
-📨 LinkedIn InMail draft — [Name], [Title] at [Company]
+LinkedIn InMail draft — [Name], [Title] at [Company]
 
 ICP fit: [Strong / Moderate] — [one-line reason]
 Post hook: "[brief quote or paraphrase]"
@@ -178,7 +182,7 @@ Same fleet-wide rule — Step 5's DM is the one exception (it's the approval gat
 |---|---|
 | `apollo_users_api_profile` / LinkedIn session resolves to Vas's identity | Abort — wrong credentials wired up. |
 | `send_message` fails on every non-connection candidate in the same pattern | Stop after 2–3 failures in a run, don't burn through the batch guessing; report "InMail send appears non-functional for Bulat's account — verify InMail credits / Premium plan" rather than marking every remaining row as individually failed. |
-| Sheet write to AO/AP/AQ fails with an out-of-range error | Sheet hasn't been resized past column AN yet — see Setup step 6. Stop, don't retry with a different column. |
+| Sheet write to AO/AP/AQ fails with an out-of-range error | Unexpected — the grid extends through BV as of 2026-08-01. Verify with `get_spreadsheet_info`; stop, don't retry with a different column. |
 | About to write to Y/Z or AG–AI | STOP. Those belong to Vas's accepted-connection pipeline / his second-touch skill, not this one. |
 
 ## Why this design
