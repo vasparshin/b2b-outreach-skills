@@ -13,7 +13,7 @@ Fork of `aictrl-linkedin-followup2`, scoped to Bulat's InMail contacts instead o
 |---|---|---|
 | A–V, W–X, Y–Z | other skills (see the other Bulat-fork files) | NEVER write |
 | AA–AN | email-sequencer / Vas's followup2 | NEVER touch |
-| AO–AQ | aictrl-linkedin-outreach-bulat | READ only (AO, AQ), NEVER write |
+| AO–AQ | aictrl-linkedin-outreach-bulat | READ only (AO, AP, AQ), NEVER write |
 | AR–AS | aictrl-linkedin-status-tracker-bulat | READ only (AR), NEVER write |
 | AT | *(reserved, unused)* | NEVER write |
 | **AU** | **THIS skill** | Second-Touch Status: `sent` / `skipped — already replied` / `skipped — not eligible` / `error` |

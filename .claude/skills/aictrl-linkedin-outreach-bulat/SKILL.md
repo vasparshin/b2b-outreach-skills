@@ -42,9 +42,9 @@ Vas's cron runs 10:00; this skill's cron, if/when scheduled, should run at a dif
 ## Model routing
 
 Same split as `aictrl-linkedin-followup`, reused directly here (2026-07-24 change, applies fleet-wide):
-- **Steps 2–4 (ICP gate, post scrape, Apollo enrichment) → Haiku subagent** via the Task tool. Feed slug/name/company/apollo_contact_id, return only: ICP verdict + reason, post hook (or "none"), enrichment notes. Don't let raw profile text leak into this skill's context.
-- **Step 5 (drafting the InMail) → default/inherited model.** This is what reply rates depend on.
-- **Steps 6–8 (approval, send, connect fold-in) → default/inherited model.**
+- **Step 3 (ICP gate, post scrape, Apollo enrichment) → Haiku subagent** via the Task tool. Feed slug/name/company/apollo_contact_id, return only: ICP verdict + reason, post hook (or "none"), enrichment notes. Don't let raw profile text leak into this skill's context.
+- **Step 4 (drafting the InMail) → default/inherited model.** This is what reply rates depend on.
+- **Steps 5–7 (approval, send, connect fold-in) → default/inherited model.**
 
 ## Column ownership — new columns, do not collide with existing owners
 
@@ -92,7 +92,7 @@ Same thin-index-then-hydrate pattern as the other skills (never a full `A:Z` rea
 
 **Truncation gotcha — read these in `<=50`-row windows, NOT as single ranges (fixed 2026-07-31).** `read_sheet_values` silently truncates its returned content to the first 50 data rows of any range, regardless of range size or the row count it reports. Narrowing to one column does NOT help — the limit is on rows, not width. **Superseded 2026-08-03 — do NOT window, use the REST route.** Windowing is correct but costs ~60 tool calls per column, each carrying the whole conversation context (fleet measurement that day: 1.28bn cache-read tokens and 48% of a day's spend from exactly this pattern). Call the shared reader once for all four columns at once and filter in Python: `python3 ~/.claude/scripts/sheets-read.py 1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ 'Log!A2:AO3100' info@boller.store --json` — verified against this spreadsheet, 3,035 rows in one call, no truncation, and a non-zero exit means "could not read" rather than "empty". Legacy fallback only if the script is unavailable: loop `Log!H<start>:H<start+49>` for `start = 2, 52, 102, ...` up through the sheet's last row and accumulate, and the same for `K`, `O` and `AO`. This step previously specified `Log!H2:H10000`, `Log!K2:K10000`, `Log!O2:O10000` and `Log!AO2:AO10000` as single calls, which meant it only ever saw sheet rows 2–51 — about 1.6% of a 3,000-row CRM — while appearing to have scanned everything. The fleet-wide fix on 2026-07-27 was applied to Vas's skills but this fork was missed; see `~/.claude/context/mcps.md`.
 
-Read the four thin index columns: `H` (slug), `K` (sequence), `O` (grade), `AO` (this skill's own gate column — the InMail dedup key, NOT col R). Filter to rows where col H is non-empty, **col AO is empty** (not yet InMail'd by this skill), col K matches H1/H2/H3 or blank, and Apollo-task scoping (see prior fork's Step 4) confirms the row belongs to Bulat's Apollo user_id. Prioritize Grade A then B then ungraded. Take top 10, hydrate only matched rows (name, title, company, slug, apollo_contact_id).
+Read the four thin index columns: `H` (slug), `K` (sequence), `O` (grade), `AO` (this skill's own gate column — the InMail dedup key, NOT col R). Filter to rows where col H is non-empty, **col AO is empty** (not yet InMail'd by this skill), col K contains `H1 — Security/Data Risk` (matches the Constants target above — do not broaden to H2/H3/blank without updating that line too), and Apollo-task scoping (see prior fork's Step 4) confirms the row belongs to Bulat's Apollo user_id. Prioritize Grade A then B then ungraded. Take top 10, hydrate only matched rows (name, title, company, slug, apollo_contact_id).
 
 **Col AO empty is the dedup key for this skill — not col R.** Col R tracks the connect-request fold-in (shared with Vas), which is a separate, non-blocking side effect. A row can have R filled (already connected, e.g. by Vas) and AO empty (never InMail'd by Bulat) — that's fine, still process it.
 
