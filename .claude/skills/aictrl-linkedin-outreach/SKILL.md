@@ -85,7 +85,7 @@ Call `mcp__linkedin__get_my_profile`. If error contains "No valid LinkedIn sessi
 When Apollo enrollment is active, its task queue is the authoritative source of "who should we LinkedIn-connect next" — every contact in H1/H2/H3 has a scheduled `linkedin_step_connect` task with a `due_at` set by Apollo's sequence pacing. Pull these via the REST API (the MCP wrapper doesn't expose this endpoint):
 
 ```bash
-source ~/.claude/secrets.env  # loads APOLLO_API_KEY (master key)
+eval "$(~/bin/secrets-env --export)"  # loads APOLLO_API_KEY (master key; plaintext secrets.env was retired 2026-07-23, encrypted store only)
 curl -s -X POST 'https://api.apollo.io/api/v1/tasks/search' \
   -H "X-Api-Key: $APOLLO_API_KEY" -H 'Content-Type: application/json' -H 'Cache-Control: no-cache' \
   --data '{
@@ -167,7 +167,7 @@ For each candidate, write to that specific row's cols R:X via `modify_sheet_valu
 - `range_name`: `Log!R<row_number>:X<row_number>`
 - `values`: `[[<R>, <S>, <T>, <U>, <V>, <W>, <X>]]`
 
-Optimization: if multiple updates land on contiguous rows, batch them. Otherwise, do individual writes — 15 is small.
+Write one range per row, always. Do NOT batch several rows into one range, even when they are adjacent: if a single row in that span is missing from your update list, every value below it lands one row too high and the sheet still looks well-formed. That is exactly how the 2026-05-21 CRM import put seven contacts' email addresses on the wrong people (found and fixed 2026-07-29; see the batched-write section of `aictrl-crm-refresh`). At 15 rows there is nothing to optimise here anyway.
 
 **CRITICAL:** never write to cols A–Q (Apollo-owned), col O (Our Grade), or cols Y–Z (tracker-owned). The range must be exactly `R<n>:X<n>`.
 

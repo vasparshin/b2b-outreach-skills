@@ -49,7 +49,7 @@ def apollo_tasks(operator):
     key = os.environ.get("APOLLO_API_KEY")
     if not key:  # fall back to the secrets file so headless callers need no `source`
         try:
-            for line in open(os.path.expanduser("~/.claude/secrets.env")):
+            for line in __import__("subprocess").run(["/home/vas/bin/secrets-env"], capture_output=True, text=True).stdout.splitlines():
                 if line.strip().startswith("APOLLO_API_KEY="):
                     key = line.split("=", 1)[1].strip().strip('"').strip("'")
                     break
@@ -122,15 +122,17 @@ def cmd_update(args):
     print(f"updated row {row}")
 
 
+_POLL_STATUSES = {"pending", "stale (pending >7d, withdraw manually)"}
+
 def cmd_pending(limit):
-    """List CRM rows with col W == 'pending' (invites awaiting acceptance)."""
+    """List CRM rows with W in pending/stale — invites that may still resolve."""
     tok = access_token()
     rows = sheet_get(tok, "Log!A2:Z5000")
     out = []
     for i, r in enumerate(rows):
         W = (r[22] if len(r) > 22 else "").strip()
         slug = (r[7] if len(r) > 7 else "").strip()
-        if W != "pending" or not slug:
+        if W not in _POLL_STATUSES or not slug:
             continue
         out.append({"row": i + 2, "slug": slug,
                     "name": (r[1] if len(r) > 1 else "").strip(),

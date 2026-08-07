@@ -18,7 +18,7 @@ Grades each contact in the master CRM `Log` tab on H1 fit + engagement, writing 
 | Token env file | `/home/vas/projects/aictrl/.telegram/.env` |
 | Default mode | rule-based only (no API calls) |
 | LLM tiebreaker | optional, off by default; enable with `--with-llm` |
-| Anthropic API key | `~/.claude/secrets.env` (`ANTHROPIC_API_KEY`) — only loaded if `--with-llm` |
+| Anthropic API key | encrypted store via `~/bin/secrets-env` (`ANTHROPIC_API_KEY`) — only loaded if `--with-llm` |
 | Re-grade existing? | NO by default — only rows with blank col O. Add `--re-grade` to force overwrite. |
 
 ## Column ownership reminder
@@ -111,7 +111,15 @@ Verify the spreadsheet is reachable and the header row matches the 26-col schema
 
 **Truncation gotcha (fleet-wide, see `~/.claude/context/mcps.md`):** `read_sheet_values` silently truncates its returned row content to the first 50 rows of any range, no matter how large the range or how many rows it reports having read. A single `Log!A2:Z10000` call only ever surfaces rows 2–51 to the model. Confirmed 2026-07-27 against this exact spreadsheet.
 
-Read in `<=50`-row windows and accumulate instead: `Log!A2:Z51`, `Log!A52:Z101`, ... up through the sheet's current last row (check via `get_spreadsheet_info`, don't assume a stale row count). Track each row's sheet row number as `array_index + 2` (offset by the window's start) and build the full gradable-rows set incrementally across windows.
+**Do NOT window — use the REST route (changed 2026-08-03).** Windowing is correct but expensive: ~60 tool calls for this sheet, each dragging the whole conversation context along. Measured fleet-wide the same day, one skill doing this burned 1.28bn cache-read tokens and 48% of a day's spend. Instead call the shared reader, which does one `GET` against the Sheets REST API with the same user OAuth credentials the MCP already uses:
+
+```
+python3 ~/.claude/scripts/sheets-read.py 1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ 'Log!A2:Z3100' info@boller.store --json
+```
+
+**Pass `--json` (or `--plain`), never the bare default, for anything doing field-position logic.** The default output prefixes each line with a row number, which shifts every column one field right — so a naive `cut -f2` returns column A, not column B. The account argument is required; omitting it exits 2 rather than silently reading a different account's sheet.
+
+Verified 2026-08-03 against this spreadsheet: 3,035 rows in a single call, no truncation. It prints numbered TSV (`--json` for JSON), and a non-zero exit means "could not read", never "sheet is empty" — a silent empty result is how the original truncation bug hid. Because it runs inside a `Bash` call you can filter in Python and print only the gradable rows, so the bulk of the CRM never enters the conversation at all — that saving is larger than the call-count one. Keep using the MCP for **writes**, which are small and targeted. Legacy fallback only if the script is unavailable: `Log!A2:Z51`, `Log!A52:Z101`, ... accumulating, tracking each row's sheet number as `array_index + 2` offset by the window start.
 
 ### 3. Filter to gradable rows
 
@@ -123,13 +131,16 @@ Skip rows that look like diagnostic / test entries (Col K contains "diagnostic" 
 
 ### 4. Apply rubric (rule-based)
 
-For each row, compute:
-- `fit` ∈ {0, 1, 2, 3} per the title keyword tiers.
-- `engagement` ∈ {0, 1, 2, 3} per the sequence-state table.
-- `channel` ∈ {0, 1, 2, 3} per the channel-state table.
-- `score = 0.4*fit + 0.3*engagement + 0.3*channel`
-- If any dimension == 0 → grade = D.
+For each row, compute ALL FOUR dimensions defined in the rubric above — the formula here must stay byte-identical to the one under "Final grade", and both must list four terms:
+- `title` ∈ {1, 2, 3} per the `Fit_Titles` tiers (section 1). No tier 0.
+- `company` ∈ {0, 1, 2, 3} per the ICP company-type scoring (section 2). **This is the dimension that carries the ICP correction — it is the only thing that keeps anti-ICP companies out of the A pool. It is NOT optional and NOT `--with-llm`-only.** In rule-based mode score it from the company name + title using section 2's definitions; use 1 (unknown) only when the name genuinely gives no signal, never as a blanket default.
+- `location` ∈ {1, 2, 3} per the `Fit_Locations` tiers (section 3).
+- `engagement` ∈ {0, 1, 2, 3} per the engagement/channel-state table (section 4).
+- `score = 0.2*title + 0.3*company + 0.2*location + 0.3*engagement`
+- If any dimension == 0 → grade = D. In particular a company scored 0 (anti-ICP) is an auto-D regardless of how strong the title, location or engagement are.
 - Else map score to A/B/C/D per the table above.
+
+**Regression guard (added 2026-07-31 — do not remove).** This step previously read `score = 0.4*fit + 0.3*engagement + 0.3*channel`, which silently dropped BOTH `company` and `location`. Because this step — not the rubric section — is what actually executes, the effect was that the ICP correction never reached the default grading path at all: every grade in col O was computed with no company-ICP term. Worked example of the failure: an AI-first developer-tooling vendor (anti-ICP, company = 0 → should be auto-D) whose contact is a US-based CTO on an active sequence scored `0.4*3 + 0.3*2 + 0.3*2 = 2.4` → **grade A**, and the `--with-llm` leg could not catch it either, because that leg only tiebreaks scores in the 1.8–2.3 band and 2.4 sits above it. Anti-ICP contacts were therefore unreachable by the ICP filter in BOTH modes, specifically at the top of the pool. If you ever edit this formula, change the rubric section in the same commit and re-read both.
 
 ### 5. Optional LLM tiebreaker (`--with-llm`)
 
@@ -172,7 +183,7 @@ Collect all `(row_number, grade)` pairs. Write to col O via `batchUpdate`:
 POST to DM `6348453236` (NEVER the group):
 
 ```
-🎯 aictrl-crm-qualify — <UTC date>
+aictrl-crm-qualify — <UTC date>
 Rows graded: <N>  (skipped: <SKIPPED>)
 Distribution: A=<N>  B=<N>  C=<N>  D=<N>
 LLM tiebreakers: <N>  (disagreements logged: <N>)

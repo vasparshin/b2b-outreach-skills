@@ -72,7 +72,13 @@ Call `apollo_users_api_profile` with `include_credit_usage: true`.
 
 **Truncation gotcha (fleet-wide, see `~/.claude/context/mcps.md`):** `read_sheet_values` silently truncates its returned row content to the first 50 rows of any range, no matter how large the range or how many rows it reports having read. A single `Log!A2:V10000` call only ever surfaces rows 2–51 to the model — everything past row 51 is invisible even though the tool claims success. Confirmed 2026-07-27 against this exact spreadsheet.
 
-Read in `<=50`-row windows and accumulate instead: `Log!A2:V51`, `Log!A52:V101`, `Log!A102:V151`, ... up through the sheet's current last row (check via `get_spreadsheet_info` — do not assume the old ~3,000 row count still holds). Build the `apollo_contact_id → row_number` map incrementally as each window comes back, rather than issuing one big read and trusting it covers everything.
+**Do NOT window — use the REST route (changed 2026-08-03).** Windowing is correct but expensive: ~60 tool calls for this sheet, each carrying the whole conversation context. Measured fleet-wide the same day, one skill doing this burned 1.28bn cache-read tokens and 48% of a day's spend. Instead call the shared reader — one `GET` against the Sheets REST API, same user OAuth credentials the MCP already uses:
+
+```
+python3 ~/.claude/scripts/sheets-read.py 1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ 'Log!A2:V3100' info@boller.store --json
+```
+
+Verified 2026-08-03 against this spreadsheet: 3,035 rows in a single call, no truncation. Non-zero exit means "could not read", never "sheet is empty". Build the `apollo_contact_id → row_number` map inside that `Bash` call and print only the map, so the CRM body never enters the conversation. Keep the MCP for **writes**. Legacy fallback only if the script is unavailable: `Log!A2:V51`, `Log!A52:V101`, ... accumulating across windows.
 
 For rows where col I is blank, key by LinkedIn slug (col H) as a fallback — this is how the 25 migrated LinkedIn rows get matched once Apollo gives us their contact_ids.
 
@@ -131,7 +137,15 @@ Then look up the row in the existing map:
 
 ### 5. Batched write
 
-Collect all UPSERT updates per row range, then call `mcp__google_workspace__modify_sheet_values` once per contiguous block to keep API calls down.
+**NEVER assemble a multi-row range from a list and write it as one block.** This instruction previously read "collect all UPSERT updates per row range, then call `modify_sheet_values` once per contiguous block to keep API calls down", and that is what corrupted the CRM: if a single contact in the block is absent from the list — no email in Apollo, filtered out, omitted by the API — every value below it lands one row too high, and the sheet still looks perfectly well-formed. It is silent, and it survives every check that reads a row as a unit.
+
+That is not hypothetical. The 2026-05-21 09:30 import shifted Location and Email up by one across sheet rows 15 and 18–23, so seven contacts carried a different real person's email address. The runs break at exactly the people whose email was blank, which is the signature of this bug. Found 2026-07-29, only because a send was being built on top of it. Corrected the same day; backup at `/home/vas/projects/aictrl/crm-backup-rows14-25-20260729.json`.
+
+Required instead:
+- **One write per row**, addressed by that row's own number, with the value taken from the record whose `apollo_contact_id` matched that row. The row number must come from the match, never from a position in a list.
+- If you must batch for API-call reasons, build the block **positionally from the sheet**: start from the existing rows in the range and replace only the cells you matched, so an unmatched row keeps its current value instead of receiving its neighbour's.
+- **Verify after writing.** Re-read the written range and confirm each row's email still corresponds to that row's person and company. A mismatch here means the write was misaligned — stop and report, do not continue to the next block.
+- Then run `python3 ~/.claude/scripts/aictrl-scan-email-mismatch.py` and confirm the off-by-one section is empty before declaring the refresh clean.
 
 Skip writes entirely in `--dry-run` mode — instead print a summary of what would have been written.
 
@@ -143,7 +157,7 @@ Call `apollo_users_api_profile` one final time. Compute:
 
 If `LEAD_DELTA != 0`: post a high-priority alert to DM `6348453236`:
 ```
-⚠️ aictrl-crm-refresh spent <LEAD_DELTA> Apollo lead credits (balance now <num_credits_remaining>). Investigate before next run.
+ALERT: aictrl-crm-refresh spent <LEAD_DELTA> Apollo lead credits (balance now <num_credits_remaining>). Investigate before next run.
 ```
 
 ### 7. DM summary to Vas
@@ -151,7 +165,7 @@ If `LEAD_DELTA != 0`: post a high-priority alert to DM `6348453236`:
 Always send a one-message summary to DM `6348453236` (never to the group):
 
 ```
-🔄 aictrl-crm-refresh — <UTC timestamp>
+aictrl-crm-refresh — <UTC timestamp>
 Contacts pulled (H1/H2/H3): <N1>/<N2>/<N3> = <total>
 Upserted: <U>  Backfilled: <B>  New rows: <NEW>
 Lead credit delta: <LEAD_DELTA> (balance <num_credits_remaining>)
@@ -159,14 +173,9 @@ Dry-run: <yes/no>
 Log: https://docs.google.com/spreadsheets/d/1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ/edit
 ```
 
-```bash
-TOKEN=$(grep -E "^TELEGRAM_BOT_TOKEN|^TOKEN|^BOT_TOKEN" /home/vas/projects/aictrl/.telegram/.env | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
-curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
-  -H "Content-Type: application/json" \
-  -d "$(jq -nc --arg chat "6348453236" --arg text "$SUMMARY" '{chat_id: ($chat | tonumber), text: $text, disable_web_page_preview: true}')" >/dev/null
-```
+**Print the summary to stdout and STOP. Do not deliver it yourself.** The cron wrapper reads stdout and delivers via `tg-send.py` under the correct bot; it is the sole sender. The sheet remains the authoritative record either way.
 
-Treat curl failure as non-fatal — the sheet is the authoritative record.
+**Removed 2026-07-31 — do not reinstate.** This step used to read `TELEGRAM_BOT_TOKEN` from `/home/vas/projects/aictrl/.telegram/.env` and `curl` the Telegram sendMessage API directly, which the fleet cron rule in `~/.claude/context/operations.md` explicitly forbids ("The LLM must NOT: curl the Telegram Bot API, source any `.telegram/.env`, read `TELEGRAM_BOT_TOKEN`"). The same block was removed from `aictrl-linkedin-outreach` on 2026-07-24 after it caused duplicate DMs, but the copies in this skill and in `aictrl-linkedin-status-tracker` were missed at the time and stayed live until a full sweep on 2026-07-31 caught them. Beyond the duplicate-message bug, delivering from inside the skill defaults to whichever token the session can see, which is how a cron ends up posting under the wrong bot.
 
 ## Failure-mode quick reference
 
