@@ -19,7 +19,7 @@ You are running the autonomous daily LinkedIn-connect batch for the **aictrl** o
 | Outreach log spreadsheet_id | `1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ` |
 | Sheet tab | `Log` |
 | GWS account to use | `Info@boller.store` |
-| Daily cap (per run) | **6** (cut from 15 on 2026-08-11 — Vas's LinkedIn account got restricted for "unusually high volume of profile data access" after the fleet's LinkedIn fork unification left 13 bot processes hitting the same account concurrently; this is aictrl's own contribution cut independent of the fleet-wide daemon-mode fix pending Vas's sign-off. See the matching incident note in aictrl-linkedin-status-tracker/SKILL.md. Revisit once the account is stable and daemon mode is confirmed live.) |
+| Daily cap (per run) | **6** (cut from 15 on 2026-08-11 — Vas's LinkedIn account got restricted for "unusually high volume of profile data access" after the fleet's LinkedIn fork unification left 13 bot processes hitting the same account concurrently; this is aictrl's own contribution cut, layered on top of the fleet-wide daemon-mode fix. CORRECTED 2026-08-14 (was stale, said "pending Vas's sign-off"): daemon mode has been live fleet-wide since ~10 Aug and is NOT what's gating this cap — confirmed by @vas_cook_bot against the running processes, daemon state dir and log; every LinkedIn call in the fleet already goes through one shared browser-owning process with a fleet-wide per-account call budget (just lowered 150/day→60, 30/hr→12, effective next restart, since the old ceiling was still above what triggered the 11 Aug restriction). That budget is now the account-level binding constraint, not this per-run number — see the matching incident note in aictrl-linkedin-status-tracker/SKILL.md, and the shared linkedin-account-guard.py cap layered on top since 2026-08-14 (wired into aictrl-linkedin-cron.sh). Whether 6/run is still the right per-project number given the daemon budget is now the real ceiling is an open question, not decided here — flag to the orchestrator/Vas rather than raising it unilaterally.) |
 | Note parameter | **omit** (workaround for bug stickerdaniel/linkedin-mcp-server#455) |
 | Sender name to log | `Vas Parshin` |
 | Telegram DM chat_id | `6348453236` (NOT group — see `feedback_no_group_posts_without_instruction.md`) |
@@ -184,6 +184,20 @@ curl -s -X PUT "https://api.apollo.io/api/v1/tasks/${TASK_ID}" \
 ```
 
 Treat any non-2xx response as non-fatal — log it but continue. Apollo's task list is the queue we're working from; if we can't mark a task complete it'll just resurface next run, where the CRM-side dedupe (col R non-empty) will skip it. Best-effort completion keeps the Apollo UI honest without making us depend on it.
+
+### 7c. Append each connect to the fleet-shared LinkedIn Connects Log
+
+Added 2026-08-14 per Vas's request (relayed by publisher): a single cross-project log of everyone's connects on the shared LinkedIn account, since publisher/certifier/aictrl all fire connects on the same account and there was no unified view of who connected with whom, from where. This is IN ADDITION to the CRM write in Step 7, not a replacement — the CRM stays the source of truth for aictrl's own pipeline (grade, sequence state, follow-up), this log is purely "who did we connect with and from where" for cross-project visibility.
+
+For each candidate whose Step 6 result was `connected` (skip `connect_unavailable` and error rows — nothing to log if no invite was actually sent):
+
+```bash
+python3 /home/vas/.claude/scripts/sheets-write.py append \
+  1GbckE2Bv1HqDF4cxWsoReBUHtxaYzbcbDGBJ4ZIMq28 "LinkedIn Connects Log" info@boller.store \
+  '["<Date YYYY-MM-DD>","aictrl","<Name>","<Title / Company>","<LinkedIn profile URL>","","" ]'
+```
+
+Columns are `Date | Project | Name | Title / Company | LinkedIn Profile | Notes | Accepted?` — leave Notes and Accepted? blank at send time; the tracker skill fills Accepted? on detected acceptance (see aictrl-linkedin-status-tracker/SKILL.md). Project is always the literal string `aictrl` (not the account name or anything else) so publisher's cross-project view can filter/group by it. Best-effort: if this append fails, log it and continue — a missing row in the shared log must never block or fail the actual connect send or the CRM write in Step 7, which are the parts of this run that matter to aictrl's own pipeline.
 
 ### 8. Print summary
 
