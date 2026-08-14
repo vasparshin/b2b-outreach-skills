@@ -1,6 +1,6 @@
 ---
 name: aictrl-linkedin-outreach
-description: Daily autonomous LinkedIn-connect batch for the aictrl outreach pipeline — reads the master CRM Log tab for H1 candidates that have NOT yet been LinkedIn-connected (col R empty), fires up to 15 no-note connection requests via the LinkedIn MCP, and updates each candidate's row in place (cols R–V). NEVER touches Apollo cols A–Q. NEVER posts to the Telegram group (-5110011669) — operator updates go to DM 6348453236 only. TRIGGER when the user types `/aictrl-linkedin-outreach`, says "run the daily aictrl LinkedIn batch", "send today's LinkedIn outreach", "fire H1 connects", or when invoked by a scheduled cron run. SKIP for one-off connects to a named individual, LinkedIn questions unrelated to the H1 pipeline, work on other projects, or when the user is asking about outreach state rather than running the batch.
+description: Daily autonomous LinkedIn-connect batch for the aictrl outreach pipeline — reads the master CRM Log tab for H1 candidates that have NOT yet been LinkedIn-connected (col R empty), fires up to 6 no-note connection requests (cut from 15 on 2026-08-11, see Daily cap row) via the LinkedIn MCP, and updates each candidate's row in place (cols R–V). NEVER touches Apollo cols A–Q. NEVER posts to the Telegram group (-5110011669) — operator updates go to DM 6348453236 only. TRIGGER when the user types `/aictrl-linkedin-outreach`, says "run the daily aictrl LinkedIn batch", "send today's LinkedIn outreach", "fire H1 connects", or when invoked by a scheduled cron run. SKIP for one-off connects to a named individual, LinkedIn questions unrelated to the H1 pipeline, work on other projects, or when the user is asking about outreach state rather than running the batch.
 ---
 
 # aictrl Daily LinkedIn Outreach Batch
@@ -19,7 +19,7 @@ You are running the autonomous daily LinkedIn-connect batch for the **aictrl** o
 | Outreach log spreadsheet_id | `1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ` |
 | Sheet tab | `Log` |
 | GWS account to use | `Info@boller.store` |
-| Daily cap (per run) | **15** |
+| Daily cap (per run) | **6** (cut from 15 on 2026-08-11 — Vas's LinkedIn account got restricted for "unusually high volume of profile data access" after the fleet's LinkedIn fork unification left 13 bot processes hitting the same account concurrently; this is aictrl's own contribution cut independent of the fleet-wide daemon-mode fix pending Vas's sign-off. See the matching incident note in aictrl-linkedin-status-tracker/SKILL.md. Revisit once the account is stable and daemon mode is confirmed live.) |
 | Note parameter | **omit** (workaround for bug stickerdaniel/linkedin-mcp-server#455) |
 | Sender name to log | `Vas Parshin` |
 | Telegram DM chat_id | `6348453236` (NOT group — see `feedback_no_group_posts_without_instruction.md`) |
@@ -99,7 +99,7 @@ curl -s -X POST 'https://api.apollo.io/api/v1/tasks/search' \
 
 - Filters to scheduled tasks in H1 + H2 + H3.
 - Default ordering is `due_at` ascending — earliest-due first, which is what we want.
-- Page through until `total_pages` reached or we have 50 candidates accumulated (more than enough headroom over the 15/day cap).
+- Page through until `total_pages` reached or we have 50 candidates accumulated (more than enough headroom over the 6/day cap).
 
 In each task, the fields we care about:
 - `task.contact_id` — match against the master sheet's "Apollo Contact ID" column (column I)
@@ -134,7 +134,7 @@ Find candidate row numbers (`array_index + 2`) where:
 - col K contains "H1"/"H2"/"H3" **OR** col K is blank (freshly-imported contacts not yet enrolled in a sequence — expected while Apollo is paused), AND
 - col O (Our Grade) is "A" or "B" if populated (prioritize these); if col O is blank, include but rank after graded rows.
 
-Sort: Grade A first, then Grade B, then ungraded, then by row number ascending within each group (oldest imports first). Take top 15.
+Sort: Grade A first, then Grade B, then ungraded, then by row number ascending within each group (oldest imports first). Take top 6 (cut from 15 on 2026-08-11).
 
 Only THEN do a second, targeted read of just those matched rows' full data (name/title/company/slug — `Log!B<row>:H<row>` per row, or a batch covering the contiguous block if the matches cluster together) to build the candidate list. Never re-read the whole sheet just to hydrate a handful of rows.
 
@@ -148,7 +148,7 @@ Build a lookup map: `apollo_contact_id (col I, index 8) → sheet_row_number` fr
 - If matched but col S (index 18) starts with "sent": skip — defensive.
 - Otherwise: include as a candidate, carrying through the slug from col H, the row number, AND the Apollo task ID (for Step 7b).
 
-Slice to top 15 (or fewer). If empty, print `No new candidates today.` and skip to Step 8.
+Slice to top 6 (or fewer, cut from 15 on 2026-08-11). If empty, print `No new candidates today.` and skip to Step 8.
 
 ### 6. Send each connect, prepare row updates
 
@@ -167,7 +167,7 @@ For each candidate, write to that specific row's cols R:X via `modify_sheet_valu
 - `range_name`: `Log!R<row_number>:X<row_number>`
 - `values`: `[[<R>, <S>, <T>, <U>, <V>, <W>, <X>]]`
 
-Write one range per row, always. Do NOT batch several rows into one range, even when they are adjacent: if a single row in that span is missing from your update list, every value below it lands one row too high and the sheet still looks well-formed. That is exactly how the 2026-05-21 CRM import put seven contacts' email addresses on the wrong people (found and fixed 2026-07-29; see the batched-write section of `aictrl-crm-refresh`). At 15 rows there is nothing to optimise here anyway.
+Write one range per row, always. Do NOT batch several rows into one range, even when they are adjacent: if a single row in that span is missing from your update list, every value below it lands one row too high and the sheet still looks well-formed. That is exactly how the 2026-05-21 CRM import put seven contacts' email addresses on the wrong people (found and fixed 2026-07-29; see the batched-write section of `aictrl-crm-refresh`). At 6 rows there is nothing to optimise here anyway.
 
 **CRITICAL:** never write to cols A–Q (Apollo-owned), col O (Our Grade), or cols Y–Z (tracker-owned). The range must be exactly `R<n>:X<n>`.
 
@@ -192,7 +192,7 @@ Exactly four lines, no preamble:
 ```
 Sent: <N>
 connect_unavailable: <N>
-Other / failed: <N> — total attempts: <N>/15
+Other / failed: <N> — total attempts: <N>/6
 Log: https://docs.google.com/spreadsheets/d/1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ/edit
 ```
 
@@ -200,7 +200,7 @@ Log: https://docs.google.com/spreadsheets/d/1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4
 
 Per the fleet-wide cron rule (`~/.claude/context/operations.md`): this skill prints Step 8's four-line summary to stdout ONLY. It must never call the Telegram Bot API, curl `api.telegram.org`, or source `.telegram/.env` — the cron WRAPPER (`aictrl-linkedin-cron.sh`) is solely responsible for parsing that stdout and delivering exactly one DM to `6348453236`. (Fixed 2026-07-24: this step used to also POST directly, causing a duplicate notification alongside the wrapper's own guaranteed-delivery send — see `feedback-cron-telegram-isolation` memory / operations.md.)
 
-If the run produced no candidates (Step 5 exited early), still print `Sent: 0 / connect_unavailable: 0 / Other / failed: 0 — total attempts: 0/15` (or equivalent) so the wrapper has a summary to parse — do not send anything yourself.
+If the run produced no candidates (Step 5 exited early), still print `Sent: 0 / connect_unavailable: 0 / Other / failed: 0 — total attempts: 0/6` (or equivalent) so the wrapper has a summary to parse — do not send anything yourself.
 
 ## Known issues — read once at startup
 
@@ -208,7 +208,7 @@ If the run produced no candidates (Step 5 exited early), still print `Sent: 0 / 
 
 **Sender mismatch:** Apollo H1 emails are sent from `bulat@aictrl.dev` (and `vas@aictrl.dev` for some H1 leads). LinkedIn outreach is from `Vas Parshin`. Recipients receive emails from one identity and connects from another — acknowledged, not currently a blocker.
 
-**LinkedIn detection risk:** unofficial automation. Cap of 15/run keeps daily volume under the ~100/week free-account invite limit.
+**LinkedIn detection risk:** unofficial automation. Cap of 6/run (cut from 15 on 2026-08-11 — see Daily cap row for the incident) keeps daily volume well under the ~100/week free-account invite limit, with margin for the fact the account is now shared live across ~13 other bot processes, not just aictrl.
 
 ## Failure-mode quick reference
 
