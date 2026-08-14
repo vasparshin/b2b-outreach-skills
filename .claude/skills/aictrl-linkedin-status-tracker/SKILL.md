@@ -19,10 +19,16 @@ This skill is the WRITER for cols W, X, Y, Z. It NEVER touches anything else.
 | GWS account | `Info@boller.store` |
 | Telegram DM chat_id | `6348453236` (NEVER the group `-5110011669`) |
 | Token env file | `/home/vas/projects/aictrl/.telegram/.env` |
-| Profile poll cap per run | **50** (free-account profile-view safety) |
+| Profile poll cap per run | **15** (cut from 50 on 2026-08-11 — see incident note below) |
 | Follow-up send cap per run | **10** (free-account DM safety) |
 | Stale-invitation threshold | **7 days** since col R; relies on LinkedIn's built-in 3-week auto-expiry for the actual withdrawal until upstream issue stickerdaniel/linkedin-mcp-server#460 ships |
 | Secondary (stray) poll cap per run | **12** (interim mitigation — see step 3b) |
+
+**Incident note, 2026-08-11 — poll cap cut 50→15.** Vas's LinkedIn account was restricted today ("unusually high volume of profile data access", ~13:12 BST lift) after the fleet's LinkedIn fork unification left 13 separate bot processes hitting the same account concurrently. The 50/run cap was sized assuming aictrl was the only consumer of the shared account (documented "~80/day soft limit" below) — that assumption no longer holds now the account is shared live across ~13 bot processes. Cut to 15/run as an immediate, aictrl-side mitigation. A duplicate contributing factor the same day: an ad-hoc interactive tracker run during a fleet pulse (15 polls) happened a few hours before the scheduled cron ran its own full 50-poll sweep — pure redundant volume. **Do not run this skill interactively/ad-hoc when the daily cron already covers it** — check `~/.claude/logs/aictrl-linkedin-tracker.log` for today's run before polling manually.
+
+**This caution is about a SEPARATE interactive invocation duplicating the cron — it does NOT apply to the cron's own scheduled run of this skill, and reading it as if it did is a real failure mode, not a hypothetical one.** On 2026-08-14, the 12:00 cron invocation itself read this line, concluded a duplicate run might be in progress ("the cron is already active... scheduled to fire around 13:16"), and deferred — even though it WAS the cron, there was no other run, and nothing was actually polled that day (confirmed: no CRM writes, no poll output, exit 0 sent to Telegram anyway). **If you are running as the scheduled cron invocation (the wrapper script invoked you via `claude -p`), you ARE the thing this note tells other invocations to check for — proceed directly to Step 1, do not look for or defer to another concurrent run of yourself.** Only skip/defer if you are a genuinely separate interactive session started by a human or a different trigger.
+
+**CORRECTED 2026-08-14 — daemon mode is live, this note was stale.** This paragraph used to say the root-cause fix was "tracked by the orchestrator, pending Vas's sign-off" and told the reader to "revisit once daemon mode is confirmed live" — @vas_cook_bot found daemon mode has actually been running fleet-wide since ~10 Aug, verified against the live processes, the daemon's state directory and its log, plus a check that no LinkedIn call bypasses it. Every one of the fleet's ~14 bot processes now proxies through one shared browser-owning daemon over loopback, which enforces a single account-level call budget (all tool types combined: reads, polls, connects, messages). That budget, not this skill's 15/run poll cap, is the actual binding constraint on the account today — and it was set too high to have prevented the 11 Aug restriction (150/day, 30/hour); CookBot lowered it to 60/day, 12/hour, effective at the next session restart (the cap is read once when the daemon owner starts). Practical consequence for this skill: if a scheduled run comes back short of its 15-poll target, the daemon budget being exhausted by another consumer (jobhunt's job searches share the same account and the same 60/day) is a likely and expected cause, not a fault in this skill. Whether 15/run is still the right aictrl-side number now that the daemon budget is the real ceiling is an open question — flag to the orchestrator/Vas rather than deciding it here.
 | Secondary (stray) pass cadence | every **5th day of the month** (`day-of-month % 5 == 0`) — not every run |
 
 ## Column ownership reminder
@@ -72,7 +78,13 @@ Do **not** hand-roll the token exchange, and do not copy the helpers out of `aic
 
 This paragraph described the windowed fallback and is **obsolete for the normal path** (2026-08-03): the claim that "each call is cheap" was the error — one pair of calls per 50 rows is ~60 pairs for this sheet, and each response is carried through every later turn of the run, which is where the cost actually lands. Use the single REST call above instead. Only if you are genuinely stuck on the fallback: split a full sweep across runs (windows 1–20 today, 21–40 tomorrow) but track which windows were covered so the sweep actually completes instead of restarting at row 2 every day.
 
-From the accumulated pending/stale row indices, convert to sheet row numbers (`array_index + 2` within each window, offset by the window's start). Sort by col R ascending (oldest first). Slice to first `poll_cap=50` row numbers. If more than 50 qualify, the rest will be picked up next run.
+From the accumulated pending/stale row indices, convert to sheet row numbers (`array_index + 2` within each window, offset by the window's start).
+
+**Ordering — fixed 2026-08-08 (Vas: "you're missing new accepted connections", traced live).** Do NOT sort the combined pending+stale pool oldest-first as one list — with a 50/run cap and 300+ pending rows plus 70+ already-marked-stale rows, oldest-first means the same already-diagnosed stale rows (which by definition are always the oldest) permanently fill the 50 slots every single run, and freshly-sent connect requests — the ones most likely to have just been accepted — are never reached at all. That is the exact bug behind "no new accepts found" on days Vas saw real acceptance notifications. Instead:
+1. Split the candidate pool into `pending` rows and `stale` rows (by current col W).
+2. Sort `pending` **newest-first** (col R descending) and take up to `poll_cap=15` of them (cut from 50, see incident note above). Newest-first, not oldest-first: an invite is far more likely to be accepted (or ignored) within its first few days than after — a connect sent yesterday is exactly the kind of row that turns up "accepted" today, and it must never lose its poll slot to a 3-week-old row that's already effectively stale in all but name. At 15/run the pending pool (300+) takes longer to fully sweep, but this trades sweep speed for account-safety margin now the account is shared across the whole fleet.
+3. Only if that leaves cap headroom (pending pool smaller than 50), fill the remainder with `stale` rows, oldest-first — this is what lets a late accept on an already-stale row still get caught, just never at the expense of a fresh one.
+4. If more than 50 pending rows qualify, the rest are picked up next run.
 
 If 0 qualify: print `No pending invitations to track.` then go straight to step 5 — still send the heartbeat DM.
 
@@ -111,7 +123,11 @@ Now in memory, accumulate per row:
 6. For any row that classifies as **ACCEPTED**: treat it exactly like a first-time accept from step 3 — write `new_W = "accepted"`, `new_X = now` via the normal step 5 write path, and feed it into step 4 (research → draft → approve → send) alongside the primary pass's new accepts. Note in the row's eventual Z entry or the DM summary that it was caught via the secondary sweep, e.g. append `(found via stray-connection sweep)` to context passed to the followup skill, so the operator summary is honest about how it was found.
 7. For candidates that are still not 1st-degree, make no CRM write at all — leave W/X exactly as they were. This pass only ever adds information, never overwrites existing pending-flow state.
 
-**Known limitation of this mitigation (say so plainly in any related reporting):** this only catches strays who are **already in the CRM with a LinkedIn slug in col H**. It cannot find people who accepted a connection but were never added to the CRM, or people outside the Apollo pipeline entirely. The real fix is a dedicated "list recently added / 1st-degree connections" LinkedIn MCP tool, tracked upstream at stickerdaniel/linkedin-mcp-server#453 (open, unfilled as of 2026-07-24). Do not present this step as closing the gap — it narrows it.
+**Known limitation of this mitigation (say so plainly in any related reporting):** this only catches strays who are **already in the CRM with a LinkedIn slug in col H**. It cannot find people who accepted a connection but were never added to the CRM, or people outside the Apollo pipeline entirely.
+
+**Real fix status (2026-08-09): built, live-verified, NOT yet deployable from this step.** Upstream stickerdaniel/linkedin-mcp-server#453 ("list recently added connections") is still open and dead since May, so we built it ourselves: `get_recent_connections` in our own fork at `/home/vas/projects/aictrl/vendor/linkedin-mcp-server` (branch `feature/recent-connections-scrape`, committed locally, not pushed — origin is the upstream OSS repo, we have no write access there). Scrapes LinkedIn's own Connections list (`mynetwork/invite-connect/connections/`, sorted newest-first by LinkedIn itself) instead of polling individual profiles — would catch every accept, not just tracked-CRM strays. Live-tested 2026-08-09 against the real account: correctly returned current connections including a same-day accept.
+
+**Why this step still can't call it:** the LinkedIn MCP server this skill actually talks to (`mcp__linkedin__*`, configured globally as `uvx linkedin-scraper-mcp@4.14.0`) is a **different package** from the fork the new tool lives in (`mcp-server-linkedin`, stickerdaniel/linkedin-mcp-server). The fork with `get_recent_connections` (and the still-unlaunched `create_post` from the aictrl Todo tab, row 27) has never been the thing actually serving live sessions — building in the fork doesn't make it live. Repointing the global `linkedin` MCP entry in `~/.claude.json` to our fork would fix this, but that entry is shared across every session/project that uses `mcp__linkedin__*` tools, not just aictrl's — a config change with that blast radius needs Vas's sign-off before it happens, not a silent switch by this skill. Flagged to Vas 2026-08-09; step 3b keeps running the CRM-poll mitigation until that's decided.
 
 ### 4. Research → draft → approve → send (first-time accepts)
 
@@ -146,6 +162,19 @@ For each row that changed, write to that row's `W<n>:Z<n>` via `modify_sheet_val
 For stale rows (W still pending but >7 days old), update W to `"stale (pending >7d, withdraw manually)"` and X to now — keeps the manual-review queue self-documenting without lying about the underlying state.
 
 Batch contiguous-row updates where possible.
+
+### 5b. Update Accepted? in the fleet-shared LinkedIn Connects Log
+
+Added 2026-08-14, companion to aictrl-linkedin-outreach Step 7c (which appends a row to this same log when a connect is sent). Best-effort only — never let this block or fail the CRM write in Step 5, which is the part of this run that matters to aictrl's own pipeline.
+
+For each row that changed to `new_W == "accepted"` this run (from Step 3 or the Step 3b stray pass):
+
+1. Read the shared log's Project and Name columns to find the matching row: `python3 /home/vas/.claude/scripts/sheets-read.py 1GbckE2Bv1HqDF4cxWsoReBUHtxaYzbcbDGBJ4ZIMq28 "LinkedIn Connects Log!A1:G1000" info@boller.store --json`.
+2. Find the row where col B (Project) = `aictrl` AND col C (Name) matches this contact's name (col B in our own CRM) AND col G (Accepted?) is blank. If more than one row matches (same name connected twice, or a name collision) — same rule as Step 6's inbox matching below: skip rather than risk updating the wrong row.
+3. If exactly one match: write `"Yes — <YYYY-MM-DD>"` to that row's col G via `modify_sheet_values`, `range_name`: `'LinkedIn Connects Log'!G<row>:G<row>`, `value_input_option: RAW`.
+4. If no match (e.g. this connect predates the 2026-08-14 shared-log rollout, so it was never appended there in the first place) — skip silently, nothing to update.
+
+Do not read the whole log on every run beyond what's needed (it's a shared, growing sheet other projects also append to) — a single `A1:G1000` read is cheap and fine at current volume; revisit with windowed reads only if the tab grows past that.
 
 ### 6. Check inbox for replies from messaged contacts
 
@@ -206,13 +235,18 @@ Replies found: <N> (<N> interested/question, <N> rejected, <N> other)
 
 **Naming rule — mandatory, applies to every named contact in this summary (new accepts, followups sent, stale list, replies):** never name a contact from memory of the polling loop or from general context. For each name you print, look up the row's `name`/`company` directly from the in-memory update record you built for THIS row in step 3/3b/5 (or, for replies, the row you matched in step 6) and quote it from there — not from a mental list of "who got accepted recently." A contact only belongs in "Accepted (new)" if `new_W == "accepted"` was set to that row **during this run** (i.e. `new_X` is this run's timestamp) — a row that was already `accepted` before this run started (stale from a prior run) must never be listed as a new accept, regardless of how prominent it was in the poll order. This applies identically to accepts found via step 3b — quote name/company from that row's own record, and label them `(via stray sweep)` in the summary so the operator can tell the two sources apart. If listing "Accepted (new)" by name, build the list explicitly as `[(row_number, name, company, source) for each row where new_W was just set to accepted this run]` before writing the message — do not reconstruct it from recollection after the fact.
 
-For each **Interested** or **Question** reply, append:
+For each **Interested** or **Question** reply, invoke the `aictrl-linkedin-reply` skill (drafting only — it never auto-sends) to produce 1-2 candidate response options, then append:
 
 ```
 **Reply from [Name] ([Company]):**
 "[full reply text]"
-→ Needs your response — handle manually in LinkedIn inbox.
+Suggested replies:
+1. "[option 1 text]"
+2. "[option 2 text]"
+→ Reply "send [Name] 1" or "send [Name] 2" to approve, or write your own.
 ```
+
+**Why (added 2026-08-08, Vas voice DM):** "handle manually in LinkedIn inbox" was the prior behaviour and Vas rejected it live — he wants the pipeline to interpret the reply and propose response options, not just flag that one exists. If `aictrl-linkedin-reply` cannot produce a confident option (reply is ambiguous, off-topic, or needs context this skill doesn't have), fall back to printing the reply text with `→ Needs your read — no confident draft, replying blind risked here.` rather than silently reverting to "handle manually".
 
 If stale_count > 0, append the list of stale contacts so the operator can withdraw them in the LinkedIn UI. Cap at 20 names to keep the message readable. **Format each entry as a markdown link with the name+company AS the label — never a bare URL** (Vas flagged raw links 2026-08-01): `[Name (Company)](https://linkedin.com/in/<slug>)`. `tg-send.py` (the wrapper's delivery path) preserves `[label](url)` links in its default MarkdownV2 mode, so the operator gets clickable names. This is the fleet-wide "link the content itself" rule — it applies to every contact list this summary emits, not just the stale list.
 
@@ -232,7 +266,7 @@ If the invocation says `--dry-run` or "dry-run only" / "don't send messages": sk
 
 **No upstream withdraw tool.** Filed as stickerdaniel/linkedin-mcp-server#460. Until that lands, stale invitations (>7d) are flagged in the DM summary but not withdrawn programmatically. LinkedIn auto-expires unaccepted invitations at ~3 weeks, so the worst case is 3 weeks of an invitation slot tied up.
 
-**Rate / detection risk.** Profile polling is heavier than outreach — every row triggers a real browser navigation. Cap of 50/run keeps daily exposure well under the ~80/day soft limit on free accounts. If we ever need to poll more, batch across multiple runs spaced apart. The secondary sweep (step 3b) adds at most 12 more, only once every 5 days, so combined exposure stays well under the limit even on sweep days (≤62 profile views vs the ~80/day soft cap).
+**Rate / detection risk.** Profile polling is heavier than outreach — every row triggers a real browser navigation. Cap of 15/run (cut from 50 on 2026-08-11, see incident note above) keeps aictrl's own daily exposure well under the old ~80/day soft limit — that limit was never re-derived for a SHARED account with ~13 other bot processes also polling it, so treat 80/day as stale until someone actually works out a fleet-wide per-account budget. If we ever need to poll more, batch across multiple runs spaced apart, and check what everyone else on the shared account did that day first. The secondary sweep (step 3b) adds at most 12 more, only once every 5 days.
 
 **Pending-only polling misses out-of-flow acceptances (KNOWN GAP, interim mitigation in place).** The primary pass (steps 2–3) only ever looks at rows with `W = "pending"`, so a contact who becomes a 1st-degree connection some other way — they accepted/sent the connection outside our tracked invite (e.g. via a mutual, an event, or LinkedIn's own "people you may know" surface) — is invisible to it. This was flagged as the "Thomas/Varun" gap in the aictrl Todo tab. Step 3b (secondary stray sweep) is a **cheap, imperfect, interim mitigation**: it only catches strays who are already in the CRM with a LinkedIn slug in col H, on a slow 5-day cadence, capped at 12/run — it does NOT catch anyone outside the CRM entirely, and it is not a substitute for a real fix. The real fix is a dedicated "list recently added / 1st-degree connections" LinkedIn MCP tool, which does not exist upstream today — tracked at stickerdaniel/linkedin-mcp-server#453 (open, unfilled as of 2026-07-24). Once that tool ships, step 3b should be retired in favor of directly diffing the connections list.
 
