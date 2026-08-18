@@ -10,7 +10,7 @@ set -uo pipefail
 export PATH="/home/vas/.local/bin:/usr/local/bin:/usr/bin:/bin"
 
 LOG="/home/vas/.claude/logs/aictrl-linkedin-tracker.log"
-CHAT_ID="6348453236"
+CHAT_ID="<YOUR_TELEGRAM_DM_CHAT_ID>"
 PROJECT="/home/vas/projects/aictrl"
 CLAUDE="/home/vas/.local/bin/claude"
 

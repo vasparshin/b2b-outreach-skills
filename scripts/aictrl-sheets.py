@@ -18,10 +18,10 @@ Env: APOLLO_API_KEY (from ~/.claude/secrets.env) for `candidates`.
 """
 import json, os, sys, datetime, urllib.request, urllib.parse
 
-CREDS = os.path.expanduser("~/.google_workspace_mcp/credentials/Info@boller.store.json")
-SID = "1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ"
-SEQS = ["69fde3942587c500119a8f10", "6a032c60fb3a7d0015fe647d", "6a04848c82740000159786ed"]
-VAS_USER_ID = "69fc6082065486001538f103"
+CREDS = os.path.expanduser("~/.google_workspace_mcp/credentials/<YOUR_GWS_ACCOUNT_EMAIL>.json")
+SID = "<YOUR_CRM_SPREADSHEET_ID>"
+SEQS = ["<YOUR_APOLLO_SEQUENCE_H1_ID>", "<YOUR_APOLLO_SEQUENCE_H2_ID>", "<YOUR_APOLLO_SEQUENCE_H3_ID>"]
+VAS_USER_ID = "<YOUR_APOLLO_USER_ID>"
 
 
 def access_token():
