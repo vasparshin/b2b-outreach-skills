@@ -36,7 +36,7 @@ flowchart TD
 
     H3 --> C3
     C3 -->|"grade-A due steps, max 5/day<br/>draft personalised email"| TG2{{Telegram DM<br/>approve / edit / skip}}
-    TG2 -->|approved| EMAIL[Email sent from vas@aictrl.dev via Outlook]
+    TG2 -->|approved| EMAIL[Email sent from <YOUR_SENDING_MAILBOX> via Outlook]
 
     REPLY[Prospect replies] -->|auto-stops that lead's sequence| CRM
     APOLLO[Apollo runs its own email sequence ~50/day<br/>for grade-B and ungraded contacts]
@@ -47,5 +47,5 @@ flowchart TD
 - **LinkedIn connect priority = grade A.** Our hand-picked A leads connect ahead of the Apollo task backlog; once connected, the cron falls through to Apollo's queue.
 - **Our email cron = grade A only, ≤5/day** (Apollo handles ~50/day for B/ungraded). Never double-emails: rows whose `Email Status` starts "skip" (already in an Apollo email sequence) are excluded.
 - **A-grade contact already in an Apollo email sequence:** if Apollo hasn't emailed them yet, remove from Apollo and run our personalised sequence; if Apollo already emailed, leave them with Apollo.
-- **Approval:** LinkedIn follow-up DMs and all emails are drafted to the Telegram DM (`6348453236`) for approve/edit/skip. Connects are the only auto step.
+- **Approval:** LinkedIn follow-up DMs and all emails are drafted to the Telegram DM (`<YOUR_TELEGRAM_DM_CHAT_ID>`) for approve/edit/skip. Connects are the only auto step.
 - **All CRM I/O goes through `aictrl-sheets.py`** (direct Sheets API) because the Google Sheets MCP can't authenticate in a headless cron.

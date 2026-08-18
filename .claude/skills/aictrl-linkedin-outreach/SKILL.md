@@ -1,6 +1,6 @@
 ---
 name: aictrl-linkedin-outreach
-description: Daily autonomous LinkedIn-connect batch for the aictrl outreach pipeline — reads the master CRM Log tab for H1 candidates that have NOT yet been LinkedIn-connected (col R empty), fires up to 15 no-note connection requests via the LinkedIn MCP, and updates each candidate's row in place (cols R–V). NEVER touches Apollo cols A–Q. NEVER posts to the Telegram group (-5110011669) — operator updates go to DM 6348453236 only. TRIGGER when the user types `/aictrl-linkedin-outreach`, says "run the daily aictrl LinkedIn batch", "send today's LinkedIn outreach", "fire H1 connects", or when invoked by a scheduled cron run. SKIP for one-off connects to a named individual, LinkedIn questions unrelated to the H1 pipeline, work on other projects, or when the user is asking about outreach state rather than running the batch.
+description: Daily autonomous LinkedIn-connect batch for the aictrl outreach pipeline — reads the master CRM Log tab for H1 candidates that have NOT yet been LinkedIn-connected (col R empty), fires up to 15 no-note connection requests via the LinkedIn MCP, and updates each candidate's row in place (cols R–V). NEVER touches Apollo cols A–Q. NEVER posts to the Telegram group (<YOUR_TEAM_GROUP_CHAT_ID>) — operator updates go to DM <YOUR_TELEGRAM_DM_CHAT_ID> only. TRIGGER when the user types `/aictrl-linkedin-outreach`, says "run the daily aictrl LinkedIn batch", "send today's LinkedIn outreach", "fire H1 connects", or when invoked by a scheduled cron run. SKIP for one-off connects to a named individual, LinkedIn questions unrelated to the H1 pipeline, work on other projects, or when the user is asking about outreach state rather than running the batch.
 ---
 
 # aictrl Daily LinkedIn Outreach Batch
@@ -13,16 +13,16 @@ You are running the autonomous daily LinkedIn-connect batch for the **aictrl** o
 
 | Thing | Value |
 |---|---|
-| Required Apollo account email | `vasparshin@gmail.com` |
-| Required Apollo user_id | `69fc6082065486001538f103` |
+| Required Apollo account email | `<YOUR_APOLLO_ACCOUNT_EMAIL>` |
+| Required Apollo user_id | `<YOUR_APOLLO_USER_ID>` |
 | Target Apollo sequence column value | `H1 — Security/Data Risk` (matched as substring on col K) |
-| Outreach log spreadsheet_id | `1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ` |
+| Outreach log spreadsheet_id | `<YOUR_CRM_SPREADSHEET_ID>` |
 | Sheet tab | `Log` |
-| GWS account to use | `Info@boller.store` |
+| GWS account to use | `<YOUR_GWS_ACCOUNT_EMAIL>` |
 | Daily cap (per run) | **15** |
 | Note parameter | **omit** (workaround for bug stickerdaniel/linkedin-mcp-server#455) |
 | Sender name to log | `Vas Parshin` |
-| Telegram DM chat_id | `6348453236` (NOT group — see `feedback_no_group_posts_without_instruction.md`) |
+| Telegram DM chat_id | `<YOUR_TELEGRAM_DM_CHAT_ID>` (NOT group — see `feedback_no_group_posts_without_instruction.md`) |
 | Apollo enrollment status | **PAUSED as of 2026-07-01** (operator directive: focus on LinkedIn, revisit email/Apollo automation later). While paused, new CRM imports are NOT being enrolled into Apollo sequences, so Apollo's task queue will legitimately return zero `linkedin_step_connect` tasks even when good candidates exist in the CRM. Source directly from the CRM (Step 5 CRM-direct path) as PRIMARY until Vas says Apollo enrollment has resumed — do not treat "zero Apollo tasks" as "zero candidates." |
 
 ## Sheet schema (26 columns A–Z — owned by which skill)
@@ -69,10 +69,10 @@ Non-blocking — continue regardless. Do NOT curl the Telegram Bot API here (fle
 ### 2. Preflight: Apollo account check + capture operator user_id
 
 Call `apollo_users_api_profile` (no parameters). Capture the response:
-- `email` — verify it's `vasparshin@gmail.com`. If not: ABORT with `ABORT: Apollo workspace is wrong (got <email>).`
+- `email` — verify it's `<YOUR_APOLLO_ACCOUNT_EMAIL>`. If not: ABORT with `ABORT: Apollo workspace is wrong (got <email>).`
 - `id` — save this as `MY_APOLLO_USER_ID`. We need it in Step 4 to filter tasks to "only the ones assigned to whoever is running this skill" so that Vas's LinkedIn outreach only touches Vas-owned contacts and Bulat's outreach only touches his.
 
-For Vas (the canonical operator), `id` should equal `69fc6082065486001538f103`. If Bulat installs this skill, his `apollo_users_api_profile` will return his own id and the same filter will scope to his Bulat-owned contacts. No code changes needed when sharing the skill — it auto-scopes to whoever's running it.
+For Vas (the canonical operator), `id` should equal `<YOUR_APOLLO_USER_ID>`. If Bulat installs this skill, his `apollo_users_api_profile` will return his own id and the same filter will scope to his Bulat-owned contacts. No code changes needed when sharing the skill — it auto-scopes to whoever's running it.
 
 ### 3. Preflight: LinkedIn session check
 
@@ -92,7 +92,7 @@ curl -s -X POST 'https://api.apollo.io/api/v1/tasks/search' \
     "per_page": 100,
     "page": 1,
     "task_priority_status_cd": "scheduled",
-    "emailer_campaign_ids": ["69fde3942587c500119a8f10", "6a032c60fb3a7d0015fe647d", "6a04848c82740000159786ed"],
+    "emailer_campaign_ids": ["<YOUR_APOLLO_SEQUENCE_H1_ID>", "<YOUR_APOLLO_SEQUENCE_H2_ID>", "<YOUR_APOLLO_SEQUENCE_H3_ID>"],
     "open_factor_names": ["task_types"]
   }'
 ```
@@ -193,12 +193,12 @@ Exactly four lines, no preamble:
 Sent: <N>
 connect_unavailable: <N>
 Other / failed: <N> — total attempts: <N>/15
-Log: https://docs.google.com/spreadsheets/d/1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ/edit
+Log: https://docs.google.com/spreadsheets/d/<YOUR_CRM_SPREADSHEET_ID>/edit
 ```
 
 ### 9. Do NOT post to Telegram yourself
 
-Per the fleet-wide cron rule (`~/.claude/context/operations.md`): this skill prints Step 8's four-line summary to stdout ONLY. It must never call the Telegram Bot API, curl `api.telegram.org`, or source `.telegram/.env` — the cron WRAPPER (`aictrl-linkedin-cron.sh`) is solely responsible for parsing that stdout and delivering exactly one DM to `6348453236`. (Fixed 2026-07-24: this step used to also POST directly, causing a duplicate notification alongside the wrapper's own guaranteed-delivery send — see `feedback-cron-telegram-isolation` memory / operations.md.)
+Per the fleet-wide cron rule (`~/.claude/context/operations.md`): this skill prints Step 8's four-line summary to stdout ONLY. It must never call the Telegram Bot API, curl `api.telegram.org`, or source `.telegram/.env` — the cron WRAPPER (`aictrl-linkedin-cron.sh`) is solely responsible for parsing that stdout and delivering exactly one DM to `<YOUR_TELEGRAM_DM_CHAT_ID>`. (Fixed 2026-07-24: this step used to also POST directly, causing a duplicate notification alongside the wrapper's own guaranteed-delivery send — see `feedback-cron-telegram-isolation` memory / operations.md.)
 
 If the run produced no candidates (Step 5 exited early), still print `Sent: 0 / connect_unavailable: 0 / Other / failed: 0 — total attempts: 0/15` (or equivalent) so the wrapper has a summary to parse — do not send anything yourself.
 
@@ -206,7 +206,7 @@ If the run produced no candidates (Step 5 exited early), still print `Sent: 0 / 
 
 **Bug #455 (LinkedIn MCP):** LinkedIn rolled out a new two-step "Add a note to your invitation?" gating dialog. The MCP's note-sending path waits for the textarea directly, never sees it (textarea only mounts after clicking "Add a note"), and returns `connect_unavailable` with `note_sent: false`. **This is why this skill never passes a `note` parameter.** When the maintainer ships a fix, change step 6 to pass an H1-aligned note (≤200 chars, first-person, don't name the sender). See: https://github.com/stickerdaniel/linkedin-mcp-server/issues/455
 
-**Sender mismatch:** Apollo H1 emails are sent from `bulat@aictrl.dev` (and `vas@aictrl.dev` for some H1 leads). LinkedIn outreach is from `Vas Parshin`. Recipients receive emails from one identity and connects from another — acknowledged, not currently a blocker.
+**Sender mismatch:** Apollo H1 emails are sent from `<TEAMMATE_SENDING_MAILBOX>` (and `<YOUR_SENDING_MAILBOX>` for some H1 leads). LinkedIn outreach is from `Vas Parshin`. Recipients receive emails from one identity and connects from another — acknowledged, not currently a blocker.
 
 **LinkedIn detection risk:** unofficial automation. Cap of 15/run keeps daily volume under the ~100/week free-account invite limit.
 

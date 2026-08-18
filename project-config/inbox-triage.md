@@ -1,6 +1,6 @@
 # inbox-triage — aictrl project config
 
-Loaded by the general `inbox-triage` skill when triaging the **vas@aictrl.dev** Microsoft 365 mailbox. Supplies aictrl's folders, the Apollo cross-reference (Stage B enrichment), the routing table, the task destination, and the digest target. The general engine carries none of this.
+Loaded by the general `inbox-triage` skill when triaging the **<YOUR_SENDING_MAILBOX>** Microsoft 365 mailbox. Supplies aictrl's folders, the Apollo cross-reference (Stage B enrichment), the routing table, the task destination, and the digest target. The general engine carries none of this.
 
 This mailbox is also the Apollo cold-outreach sender, so the Inbox mixes: real sequence bounces, real prospect replies, prospect auto-replies, Apollo product/marketing mail, and warmup chatter. The Apollo cross-reference is what tells them apart.
 
@@ -8,16 +8,16 @@ This mailbox is also the Apollo cold-outreach sender, so the Inbox mixes: real s
 
 | Thing | Value |
 |---|---|
-| Mailbox | `vas@aictrl.dev` (ms365 MCP) |
-| Apollo account email (must match) | `vasparshin@gmail.com` |
-| Apollo user_id | `69fc6082065486001538f103` |
-| H1 sequence_id | `69fde3942587c500119a8f10` |
-| H2 sequence_id | `6a032c60fb3a7d0015fe647d` |
-| H3 sequence_id | `6a04848c82740000159786ed` |
-| CRM spreadsheet_id | `1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ` |
+| Mailbox | `<YOUR_SENDING_MAILBOX>` (ms365 MCP) |
+| Apollo account email (must match) | `<YOUR_APOLLO_ACCOUNT_EMAIL>` |
+| Apollo user_id | `<YOUR_APOLLO_USER_ID>` |
+| H1 sequence_id | `<YOUR_APOLLO_SEQUENCE_H1_ID>` |
+| H2 sequence_id | `<YOUR_APOLLO_SEQUENCE_H2_ID>` |
+| H3 sequence_id | `<YOUR_APOLLO_SEQUENCE_H3_ID>` |
+| CRM spreadsheet_id | `<YOUR_CRM_SPREADSHEET_ID>` |
 | Task tab | `Tasks` |
-| GWS account (Sheets) | `Info@boller.store` |
-| Digest target | Telegram DM `6348453236` ONLY — NEVER group `-5110011669` |
+| GWS account (Sheets) | `<YOUR_GWS_ACCOUNT_EMAIL>` |
+| Digest target | Telegram DM `<YOUR_TELEGRAM_DM_CHAT_ID>` ONLY — NEVER group `<YOUR_TEAM_GROUP_CHAT_ID>` |
 | Telegram token file | `/home/vas/projects/aictrl/.telegram/.env` |
 | Apollo product/marketing senders | `support@tryapollo.io`, `hello@mail.apollo.io`, `*@mail.apollo.io` |
 
@@ -56,13 +56,13 @@ For a `BOUNCE` message, the bounced recipient is in the **original message** the
 
 Warmup token rule: any message whose subject contains the token `wbx ` followed by a short code (e.g. "…- wbx gne") is Apollo mail-warming network traffic — move it to `Apollo Mailwarming`. This is a reliable warmup signal regardless of sender. (Note: Apollo's own inbox rule often moves these automatically, so they may already be gone.)
 
-Self-send rule: a message where both From and To are the mailbox owner (`vas@aictrl.dev`) with no matching Apollo contact is a test/preview send — move it to `Archive` (no action, no task).
+Self-send rule: a message where both From and To are the mailbox owner (`<YOUR_SENDING_MAILBOX>`) with no matching Apollo contact is a test/preview send — move it to `Archive` (no action, no task).
 
 Conservative rule: aside from the `wbx` token above, never move a message to `Apollo Mailwarming` automatically unless it is unambiguously warmup-network chatter (generic subject, sender not in Apollo, not a reply/bounce/notification). When in doubt, leave it in the Inbox flagged.
 
 ## Task destination — `Tasks` tab
 
-Append one row per task-worthy item via `mcp__google_workspace__append_table_rows` / `modify_sheet_values` (GWS account `Info@boller.store`, spreadsheet above). Columns:
+Append one row per task-worthy item via `mcp__google_workspace__append_table_rows` / `modify_sheet_values` (GWS account `<YOUR_GWS_ACCOUNT_EMAIL>`, spreadsheet above). Columns:
 
 | Col | Field |
 |---|---|
@@ -80,12 +80,12 @@ Idempotency: before appending, read existing `Tasks!A2:C` and skip any row whose
 
 ## Digest
 
-Send the preview plan and the post-run summary to Telegram DM `6348453236` only (never the group). Use the token from the file above:
+Send the preview plan and the post-run summary to Telegram DM `<YOUR_TELEGRAM_DM_CHAT_ID>` only (never the group). Use the token from the file above:
 
 ```bash
 TOKEN=$(grep -E "^TELEGRAM_BOT_TOKEN|^TOKEN|^BOT_TOKEN" /home/vas/projects/aictrl/.telegram/.env | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
 curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" -H "Content-Type: application/json" \
-  -d "$(jq -nc --arg chat "6348453236" --arg text "$MSG" '{chat_id: ($chat|tonumber), text:$text, disable_web_page_preview:true}')" >/dev/null
+  -d "$(jq -nc --arg chat "<YOUR_TELEGRAM_DM_CHAT_ID>" --arg text "$MSG" '{chat_id: ($chat|tonumber), text:$text, disable_web_page_preview:true}')" >/dev/null
 ```
 
 Related memory: `project_email_tooling.md`, `project_ms365.md`, `reference_apollo.md`, `feedback_no_group_posts_without_instruction.md`.

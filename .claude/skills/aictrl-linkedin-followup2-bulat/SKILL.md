@@ -1,6 +1,6 @@
 ---
 name: aictrl-linkedin-followup2-bulat
-description: Second-touch nudge for Bulat's InMail outreach fork — BULAT'S FORK of aictrl-linkedin-followup2. Nudges contacts Bulat InMail'd (col AO="sent") who never replied (col AR empty or "none") after a cooldown period. Unlike Vas's followup2 (auto-send, trust earned over months), this fork is approve-before-send since Bulat's InMail pipeline is brand new and unproven. Writes cols AU–AW only. NEVER touches anything else. NEVER posts to the Telegram group (-5110011669). TRIGGER on `/aictrl-linkedin-followup2-bulat`, "nudge Bulat's InMail contacts", "run Bulat's second-touch". SKIP for Vas's own second-touch (use aictrl-linkedin-followup2) or Bulat's first-touch/reply-tracking (use aictrl-linkedin-outreach-bulat / aictrl-linkedin-status-tracker-bulat).
+description: Second-touch nudge for Bulat's InMail outreach fork — BULAT'S FORK of aictrl-linkedin-followup2. Nudges contacts Bulat InMail'd (col AO="sent") who never replied (col AR empty or "none") after a cooldown period. Unlike Vas's followup2 (auto-send, trust earned over months), this fork is approve-before-send since Bulat's InMail pipeline is brand new and unproven. Writes cols AU–AW only. NEVER touches anything else. NEVER posts to the Telegram group (<YOUR_TEAM_GROUP_CHAT_ID>). TRIGGER on `/aictrl-linkedin-followup2-bulat`, "nudge Bulat's InMail contacts", "run Bulat's second-touch". SKIP for Vas's own second-touch (use aictrl-linkedin-followup2) or Bulat's first-touch/reply-tracking (use aictrl-linkedin-outreach-bulat / aictrl-linkedin-status-tracker-bulat).
 ---
 
 # aictrl LinkedIn Second-Touch Follow-up — Bulat's Fork
@@ -24,10 +24,10 @@ Fork of `aictrl-linkedin-followup2`, scoped to Bulat's InMail contacts instead o
 
 | Thing | Value |
 |---|---|
-| Spreadsheet ID | `1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ` |
+| Spreadsheet ID | `<YOUR_CRM_SPREADSHEET_ID>` |
 | Sheet tab | `Log` |
-| GWS account | `Info@boller.store` — **[BULAT]** confirm write access |
-| Telegram DM chat_id | **[BULAT]** placeholder — his own chat_id, do NOT reuse Vas's `6348453236` |
+| GWS account | `<YOUR_GWS_ACCOUNT_EMAIL>` — **[BULAT]** confirm write access |
+| Telegram DM chat_id | **[BULAT]** placeholder — his own chat_id, do NOT reuse Vas's `<YOUR_TELEGRAM_DM_CHAT_ID>` |
 | Min age before nudge | **7 days** since col AP (InMail Sent At) |
 | Max age (lookback window) | **90 days** since col AP |
 | Send cap per run | **5/day** — same conservative cap as Vas's fork |

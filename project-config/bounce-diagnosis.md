@@ -1,19 +1,19 @@
 # bounce-diagnosis — aictrl project config
 
-Loaded by the general `bounce-diagnosis` skill when diagnosing bounces for the **vas@aictrl.dev** Microsoft 365 mailbox (also the Apollo cold-outreach sender, alongside bulat@aictrl.dev). Reads NDRs, splits bad-address from reputation/auth, checks `aictrl.dev` email auth, writes list-hygiene tasks. Read-only: never suppresses in Apollo, never edits DNS.
+Loaded by the general `bounce-diagnosis` skill when diagnosing bounces for the **<YOUR_SENDING_MAILBOX>** Microsoft 365 mailbox (also the Apollo cold-outreach sender, alongside <TEAMMATE_SENDING_MAILBOX>). Reads NDRs, splits bad-address from reputation/auth, checks `aictrl.dev` email auth, writes list-hygiene tasks. Read-only: never suppresses in Apollo, never edits DNS.
 
 ## Constants (shared with inbox-triage / reply-audit)
 
 | Thing | Value |
 |---|---|
-| Mailbox | `vas@aictrl.dev` (ms365 MCP) |
-| Apollo account email (must match) | `vasparshin@gmail.com` |
-| H1 / H2 / H3 sequence_ids | `69fde3942587c500119a8f10` / `6a032c60fb3a7d0015fe647d` / `6a04848c82740000159786ed` |
-| CRM spreadsheet_id | `1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ` |
+| Mailbox | `<YOUR_SENDING_MAILBOX>` (ms365 MCP) |
+| Apollo account email (must match) | `<YOUR_APOLLO_ACCOUNT_EMAIL>` |
+| H1 / H2 / H3 sequence_ids | `<YOUR_APOLLO_SEQUENCE_H1_ID>` / `<YOUR_APOLLO_SEQUENCE_H2_ID>` / `<YOUR_APOLLO_SEQUENCE_H3_ID>` |
+| CRM spreadsheet_id | `<YOUR_CRM_SPREADSHEET_ID>` |
 | Task tab | `Tasks` (same 9-col schema) |
-| GWS account (Sheets) | `Info@boller.store` |
+| GWS account (Sheets) | `<YOUR_GWS_ACCOUNT_EMAIL>` |
 | Sending domain (for auth check) | `aictrl.dev` (covers both senders vas@ + bulat@) |
-| Digest target | Telegram DM `6348453236` ONLY — NEVER group `-5110011669` |
+| Digest target | Telegram DM `<YOUR_TELEGRAM_DM_CHAT_ID>` ONLY — NEVER group `<YOUR_TEAM_GROUP_CHAT_ID>` |
 | Telegram token file | `/home/vas/projects/aictrl/.telegram/.env` |
 
 ## Bounce source
@@ -45,16 +45,16 @@ Dedupe: read `Tasks!A2:F`, skip (Sender/recipient + Subject) already present.
 
 ## Task destination — `Tasks` tab
 
-Append via `mcp__google_workspace__modify_sheet_values` (GWS `Info@boller.store`). 9-col schema: Date | Sender | Subject | Contact | Apollo status | Task type | Suggested action | Status | Owner. For bounce rows, put the **failed recipient** in the Sender column and the bounce code + class in the Apollo-status/Suggested-action cells. Task types: `bad-address`, `deliverability`.
+Append via `mcp__google_workspace__modify_sheet_values` (GWS `<YOUR_GWS_ACCOUNT_EMAIL>`). 9-col schema: Date | Sender | Subject | Contact | Apollo status | Task type | Suggested action | Status | Owner. For bounce rows, put the **failed recipient** in the Sender column and the bounce code + class in the Apollo-status/Suggested-action cells. Task types: `bad-address`, `deliverability`.
 
 ## Report + digest
 
-Build the bounce report (counts by code class · per-recipient table · domain-auth verdict · one-line bottom line) and send to Telegram DM `6348453236` only (never the group):
+Build the bounce report (counts by code class · per-recipient table · domain-auth verdict · one-line bottom line) and send to Telegram DM `<YOUR_TELEGRAM_DM_CHAT_ID>` only (never the group):
 
 ```bash
 TOKEN=$(grep -E "^TELEGRAM_BOT_TOKEN|^TOKEN|^BOT_TOKEN" /home/vas/projects/aictrl/.telegram/.env | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
 curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" -H "Content-Type: application/json" \
-  -d "$(jq -nc --arg chat "6348453236" --arg text "$MSG" '{chat_id: ($chat|tonumber), text:$text, disable_web_page_preview:true}')" >/dev/null
+  -d "$(jq -nc --arg chat "<YOUR_TELEGRAM_DM_CHAT_ID>" --arg text "$MSG" '{chat_id: ($chat|tonumber), text:$text, disable_web_page_preview:true}')" >/dev/null
 ```
 
 Related: `inbox-triage.md`, `reply-audit.md`, `project_email_tooling.md`, `reference_apollo.md`, `feedback_no_group_posts_without_instruction.md`.

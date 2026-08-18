@@ -4,16 +4,16 @@ Loaded by the general `email-sequencer` skill. Drives the cold-email follow-up c
 
 ## Stack
 
-- **Mail:** Microsoft 365 (`mcp__ms365__*`), sender **vas@aictrl.dev**. Draft with `create-draft-email`, send with `send-draft-message`, reply-check with `list-mail-messages` / `search-query` (KQL, quoted).
-- **CRM:** the unified **`Log` tab** of spreadsheet `1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ` (GWS `Info@boller.store`). One row per contact — Apollo-sourced and hand-picked alike (the old separate `Sequence`/`Prospects` tabs were merged in 2026-05-28; archived as `Sequence_archived_*` / `Research_staging`).
+- **Mail:** Microsoft 365 (`mcp__ms365__*`), sender **<YOUR_SENDING_MAILBOX>**. Draft with `create-draft-email`, send with `send-draft-message`, reply-check with `list-mail-messages` / `search-query` (KQL, quoted).
+- **CRM:** the unified **`Log` tab** of spreadsheet `<YOUR_CRM_SPREADSHEET_ID>` (GWS `<YOUR_GWS_ACCOUNT_EMAIL>`). One row per contact — Apollo-sourced and hand-picked alike (the old separate `Sequence`/`Prospects` tabs were merged in 2026-05-28; archived as `Sequence_archived_*` / `Research_staging`).
   - **Email-sequence state lives in cols AA–AF:** `AA Email Status · AB Email Step · AC Email Last Sent · AD Email Next Due · AE Email Reply? · AF Why / Hook`. Grade is **col O** (A/B/C/D); the personalisation hook is **AF**.
   - **Access via the direct-API helper, not the Sheets MCP** (the MCP can't auth headless): `python3 ~/.claude/scripts/aictrl-sheets.py due-steps [N]` lists grade-ordered due rows (excludes `Email Status` starting "skip", e.g. leads already in an Apollo email sequence — never double-email); `... email-update <row> <status> <step> <last_sent> <next_due> [reply]` advances a row after a send.
-- **Approval channel:** Telegram DM **chat_id `6348453236`** (`mcp__plugin_telegram_telegram__reply`). Route every drafted step here for approve / edit / skip.
+- **Approval channel:** Telegram DM **chat_id `<YOUR_TELEGRAM_DM_CHAT_ID>`** (`mcp__plugin_telegram_telegram__reply`). Route every drafted step here for approve / edit / skip.
 
 ## Safety flags
 
 - **`auto_send: false`** — NEVER send without explicit operator approval in the Telegram DM. (Vas's standing rule: outreach approval happens via Telegram, not the CC console.)
-- Never post sequence activity to the group `-5110011669`.
+- Never post sequence activity to the group `<YOUR_TEAM_GROUP_CHAT_ID>`.
 - **Exclusions:** skip any lead already `replied`/`stopped`; skip addresses that bounced (run `bounce-diagnosis` on NDRs and `stop` them); never enrol an existing customer/partner.
 
 ## The offer + positioning (must match prospect-research config)

@@ -41,10 +41,10 @@ Reference shape (do NOT send verbatim — personalize the opener every time):
 
 ## Apollo / LinkedIn context
 
-Sequences H1 `69fde3942587c500119a8f10` / H2 `6a032c60fb3a7d0015fe647d` / H3 `6a04848c82740000159786ed`. CRM spreadsheet `1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ` (GWS `Info@boller.store`). LinkedIn slug is CRM col H. See `inbox-triage.md` for the shared Apollo lookup pattern.
+Sequences H1 `<YOUR_APOLLO_SEQUENCE_H1_ID>` / H2 `<YOUR_APOLLO_SEQUENCE_H2_ID>` / H3 `<YOUR_APOLLO_SEQUENCE_H3_ID>`. CRM spreadsheet `<YOUR_CRM_SPREADSHEET_ID>` (GWS `<YOUR_GWS_ACCOUNT_EMAIL>`). LinkedIn slug is CRM col H. See `inbox-triage.md` for the shared Apollo lookup pattern.
 
 ## Output / handoff
 
-Standalone: print the brief (+ draft) to the operator. Via the status-tracker: return brief + draft so the tracker can route it to Telegram DM `6348453236` for approve/edit/skip before sending. Never send from this skill. Never post to the group `-5110011669`.
+Standalone: print the brief (+ draft) to the operator. Via the status-tracker: return brief + draft so the tracker can route it to Telegram DM `<YOUR_TELEGRAM_DM_CHAT_ID>` for approve/edit/skip before sending. Never send from this skill. Never post to the group `<YOUR_TEAM_GROUP_CHAT_ID>`.
 
 Related: `inbox-triage.md`, `reply-audit.md`, `reference_linkedin_mcp.md`, `feedback_no_group_posts_without_instruction.md`. Related skills: `aictrl-linkedin-status-tracker`, `aictrl-linkedin-outreach`.

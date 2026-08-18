@@ -1,6 +1,6 @@
 ---
 name: aictrl-linkedin-status-tracker
-description: Daily LinkedIn invitation-status tracker for the aictrl outreach pipeline. Reads the master CRM Log tab for rows with col W = "pending", polls each contact's LinkedIn profile via get_person_profile, detects acceptance, sends an H1 follow-up message via send_message on first-detected accept, and updates the CRM (cols W, X, Y, Z). Flags pending invitations older than 7 days for manual withdrawal and reports them via DM to operator 6348453236. NEVER touches Apollo cols A–Q. NEVER touches col O (Our Grade). NEVER touches cols R–V (owned by aictrl-linkedin-outreach). NEVER posts to the Telegram group (-5110011669). TRIGGER on `/aictrl-linkedin-status-tracker`, "check LinkedIn acceptances", "run the LinkedIn tracker", "poll pending invites". SKIP for one-off profile checks of named individuals, LinkedIn outreach (use aictrl-linkedin-outreach), CRM refresh (use aictrl-crm-refresh), or contact qualification.
+description: Daily LinkedIn invitation-status tracker for the aictrl outreach pipeline. Reads the master CRM Log tab for rows with col W = "pending", polls each contact's LinkedIn profile via get_person_profile, detects acceptance, sends an H1 follow-up message via send_message on first-detected accept, and updates the CRM (cols W, X, Y, Z). Flags pending invitations older than 7 days for manual withdrawal and reports them via DM to operator <YOUR_TELEGRAM_DM_CHAT_ID>. NEVER touches Apollo cols A–Q. NEVER touches col O (Our Grade). NEVER touches cols R–V (owned by aictrl-linkedin-outreach). NEVER posts to the Telegram group (<YOUR_TEAM_GROUP_CHAT_ID>). TRIGGER on `/aictrl-linkedin-status-tracker`, "check LinkedIn acceptances", "run the LinkedIn tracker", "poll pending invites". SKIP for one-off profile checks of named individuals, LinkedIn outreach (use aictrl-linkedin-outreach), CRM refresh (use aictrl-crm-refresh), or contact qualification.
 ---
 
 # aictrl LinkedIn Status Tracker
@@ -13,11 +13,11 @@ This skill is the WRITER for cols W, X, Y, Z. It NEVER touches anything else.
 
 | Thing | Value |
 |---|---|
-| Required Apollo account email | `vasparshin@gmail.com` |
-| Spreadsheet ID | `1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ` |
+| Required Apollo account email | `<YOUR_APOLLO_ACCOUNT_EMAIL>` |
+| Spreadsheet ID | `<YOUR_CRM_SPREADSHEET_ID>` |
 | Sheet tab | `Log` |
-| GWS account | `Info@boller.store` |
-| Telegram DM chat_id | `6348453236` (NEVER the group `-5110011669`) |
+| GWS account | `<YOUR_GWS_ACCOUNT_EMAIL>` |
+| Telegram DM chat_id | `<YOUR_TELEGRAM_DM_CHAT_ID>` (NEVER the group `<YOUR_TEAM_GROUP_CHAT_ID>`) |
 | Token env file | `/home/vas/projects/aictrl/.telegram/.env` |
 | Profile poll cap per run | **50** (free-account profile-view safety) |
 | Follow-up send cap per run | **10** (free-account DM safety) |
@@ -61,7 +61,7 @@ Call `mcp__linkedin__get_my_profile`. On "No valid LinkedIn session was found" e
 **Better fix, added 2026-08-03 — do not window, bypass the MCP for the bulk read entirely.** Windowing is correct but ruinously expensive: it turns one read into ~60 tool calls, and every one of them drags the whole conversation context along. Measured on the fleet the same day, a skill doing exactly this produced 1,258 windowed reads, 1.28bn cache-read tokens and 48% of the day's total spend — the cost was the re-reading, not the data. Instead, use the fleet's shared reader — one `GET` against the Sheets REST API with the same user OAuth credentials the MCP already uses, nothing new to authorise:
 
 ```
-python3 ~/.claude/scripts/sheets-read.py 1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ 'Log!A2:BB3100' info@boller.store --json
+python3 ~/.claude/scripts/sheets-read.py <YOUR_CRM_SPREADSHEET_ID> 'Log!A2:BB3100' <your_gws_account_email> --json
 ```
 
 Verified 2026-08-03 against this spreadsheet: 3,035 rows by 54 columns in one call, no truncation. Three deliberate behaviours, each of which is a silent-wrong-answer trap someone paid for on 2026-08-03 — the account argument is **required** (omitting it exits 2 rather than reading a different account's sheet and reporting "empty"); pass `--json` or `--plain` for any field-position logic, because the bare default prefixes a row number that shifts every column one field right; and a non-zero exit means "could not read", never "sheet is empty". Because it runs inside a `Bash` call you filter in Python and print only the rows you need, so the bulk of the sheet never enters the conversation at all — that saving is larger than the call-count one. Keep using the MCP for *writes*, which are small and targeted.
@@ -122,7 +122,7 @@ The followup skill handles the full pipeline:
 - Step 2: Post scrape — recent LinkedIn posts for personalisation hook.
 - Step 3: Apollo enrichment.
 - Step 4: Draft in aictrl voice.
-- Step 5: Persist the draft to CRM cols `BA`/`BB`, THEN post to operator Telegram DM `6348453236` for approval.
+- Step 5: Persist the draft to CRM cols `BA`/`BB`, THEN post to operator Telegram DM `<YOUR_TELEGRAM_DM_CHAT_ID>` for approval.
 - Step 6: Send on explicit approval.
 
 **Cron vs interactive split:**
@@ -190,7 +190,7 @@ This returns the complete history — every message, both participants, with dat
 
 ### 7. DM summary to operator
 
-POST to DM `6348453236` (NEVER the group). Format:
+POST to DM `<YOUR_TELEGRAM_DM_CHAT_ID>` (NEVER the group). Format:
 
 ```
 **LinkedIn tracker — <UTC date>**
@@ -246,7 +246,7 @@ If the invocation says `--dry-run` or "dry-run only" / "don't send messages": sk
 | `send_message` fails | Leave Y/Z blank, mark in the summary. Operator can retry manually. |
 | Sheet auth fails | Follow `feedback_gws_auth_dedup_first.md` — dedup MCP processes first. |
 | About to write outside W:Z | STOP. Cols A–V are NOT this skill's territory. |
-| Telegram message about to go to group `-5110011669` | STOP. Per `feedback_no_group_posts_without_instruction.md` — DM only. |
+| Telegram message about to go to group `<YOUR_TEAM_GROUP_CHAT_ID>` | STOP. Per `feedback_no_group_posts_without_instruction.md` — DM only. |
 | Inbox name match is ambiguous | Skip that conversation — don't risk writing to the wrong CRM row. |
 | `get_conversation` fails for a reply | Skip that reply, note in summary. Don't block the rest of the run. |
 

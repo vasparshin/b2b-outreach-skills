@@ -1,6 +1,6 @@
 ---
 name: aictrl-crm-refresh
-description: Refresh the aictrl master CRM sheet (Log tab in spreadsheet 1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ) with current Apollo state for every contact in our H1/H2/H3 sequences. Reads contacts from the three active sequences via Apollo MCP, dedupes by apollo_contact_id, upserts location/email/sequence-step/sequence-status/apollo-status/last-step-sent/last-reply. NEVER overwrites column O (Our Grade). NEVER writes LinkedIn cols R–V. NEVER posts to the Telegram group (-5110011669) — operator updates go to DM 6348453236 only. TRIGGER on `/aictrl-crm-refresh`, "refresh the CRM", "pull latest Apollo state", "update the CRM sheet". SKIP for one-off contact lookups, qualifying/grading tasks, LinkedIn outreach (use aictrl-linkedin-outreach instead).
+description: Refresh the aictrl master CRM sheet (Log tab in spreadsheet <YOUR_CRM_SPREADSHEET_ID>) with current Apollo state for every contact in our H1/H2/H3 sequences. Reads contacts from the three active sequences via Apollo MCP, dedupes by apollo_contact_id, upserts location/email/sequence-step/sequence-status/apollo-status/last-step-sent/last-reply. NEVER overwrites column O (Our Grade). NEVER writes LinkedIn cols R–V. NEVER posts to the Telegram group (<YOUR_TEAM_GROUP_CHAT_ID>) — operator updates go to DM <YOUR_TELEGRAM_DM_CHAT_ID> only. TRIGGER on `/aictrl-crm-refresh`, "refresh the CRM", "pull latest Apollo state", "update the CRM sheet". SKIP for one-off contact lookups, qualifying/grading tasks, LinkedIn outreach (use aictrl-linkedin-outreach instead).
 ---
 
 # aictrl CRM Refresh
@@ -14,22 +14,22 @@ This skill is **manual-trigger by default**. It can be scheduled via cron only a
 1. **Zero-credit budget.** Apollo lead credits must NOT be spent. The skill captures `num_lead_credits_used` before and after, and ABORTS if delta > 0.
 2. **Never touch column O (Our Grade).** That column is owned by the qualifier skill / human. Even in dry-run mode, no write into column O.
 3. **Never overwrite LinkedIn columns R–V** for existing rows. Those are owned by `aictrl-linkedin-outreach`.
-4. **Never post to the aictrl-ops Telegram group `-5110011669`.** All progress, alerts, and summaries go to DM `6348453236` only. See `feedback_no_group_posts_without_instruction.md`.
+4. **Never post to the aictrl-ops Telegram group `<YOUR_TEAM_GROUP_CHAT_ID>`.** All progress, alerts, and summaries go to DM `<YOUR_TELEGRAM_DM_CHAT_ID>` only. See `feedback_no_group_posts_without_instruction.md`.
 5. **Dry-run mode** (`--dry-run` or natural language "dry-run only"): pull at most 5 contacts, perform all reads and credit checks, but write NOTHING to the sheet. Print what would have been written.
 
 ## Constants
 
 | Thing | Value |
 |---|---|
-| Required Apollo account email | `vasparshin@gmail.com` |
-| Required Apollo user_id | `69fc6082065486001538f103` |
-| Master CRM spreadsheet_id | `1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ` |
+| Required Apollo account email | `<YOUR_APOLLO_ACCOUNT_EMAIL>` |
+| Required Apollo user_id | `<YOUR_APOLLO_USER_ID>` |
+| Master CRM spreadsheet_id | `<YOUR_CRM_SPREADSHEET_ID>` |
 | Sheet tab | `Log` (post-rename — until rename, use `Log_v2`) |
-| GWS account | `Info@boller.store` |
-| H1 sequence_id | `69fde3942587c500119a8f10` |
-| H2 sequence_id | `6a032c60fb3a7d0015fe647d` |
-| H3 sequence_id | `6a04848c82740000159786ed` |
-| Telegram DM chat_id | `6348453236` |
+| GWS account | `<YOUR_GWS_ACCOUNT_EMAIL>` |
+| H1 sequence_id | `<YOUR_APOLLO_SEQUENCE_H1_ID>` |
+| H2 sequence_id | `<YOUR_APOLLO_SEQUENCE_H2_ID>` |
+| H3 sequence_id | `<YOUR_APOLLO_SEQUENCE_H3_ID>` |
+| Telegram DM chat_id | `<YOUR_TELEGRAM_DM_CHAT_ID>` |
 | Token env file | `/home/vas/projects/aictrl/.telegram/.env` |
 
 ## Sheet schema (22 columns A–V)
@@ -65,7 +65,7 @@ This skill is **manual-trigger by default**. It can be scheduled via cron only a
 
 Call `apollo_users_api_profile` with `include_credit_usage: true`.
 
-- If `email != "vasparshin@gmail.com"`: ABORT. Print: `ABORT: Apollo MCP is on the wrong workspace (got <email>).` Do not proceed.
+- If `email != "<YOUR_APOLLO_ACCOUNT_EMAIL>"`: ABORT. Print: `ABORT: Apollo MCP is on the wrong workspace (got <email>).` Do not proceed.
 - Capture `START_CREDITS = num_lead_credits_used` and `START_BALANCE = num_credits_remaining`. Hold for the post-run delta check.
 
 ### 2. Read existing CRM rows
@@ -75,7 +75,7 @@ Call `apollo_users_api_profile` with `include_credit_usage: true`.
 **Do NOT window — use the REST route (changed 2026-08-03).** Windowing is correct but expensive: ~60 tool calls for this sheet, each carrying the whole conversation context. Measured fleet-wide the same day, one skill doing this burned 1.28bn cache-read tokens and 48% of a day's spend. Instead call the shared reader — one `GET` against the Sheets REST API, same user OAuth credentials the MCP already uses:
 
 ```
-python3 ~/.claude/scripts/sheets-read.py 1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ 'Log!A2:V3100' info@boller.store --json
+python3 ~/.claude/scripts/sheets-read.py <YOUR_CRM_SPREADSHEET_ID> 'Log!A2:V3100' <your_gws_account_email> --json
 ```
 
 Verified 2026-08-03 against this spreadsheet: 3,035 rows in a single call, no truncation. Non-zero exit means "could not read", never "sheet is empty". Build the `apollo_contact_id → row_number` map inside that `Bash` call and print only the map, so the CRM body never enters the conversation. Keep the MCP for **writes**. Legacy fallback only if the script is unavailable: `Log!A2:V51`, `Log!A52:V101`, ... accumulating across windows.
@@ -155,14 +155,14 @@ Call `apollo_users_api_profile` one final time. Compute:
 - `LEAD_DELTA = num_lead_credits_used - START_CREDITS`
 - `BALANCE_DELTA = num_credits_remaining - START_BALANCE`
 
-If `LEAD_DELTA != 0`: post a high-priority alert to DM `6348453236`:
+If `LEAD_DELTA != 0`: post a high-priority alert to DM `<YOUR_TELEGRAM_DM_CHAT_ID>`:
 ```
 ALERT: aictrl-crm-refresh spent <LEAD_DELTA> Apollo lead credits (balance now <num_credits_remaining>). Investigate before next run.
 ```
 
 ### 7. DM summary to Vas
 
-Always send a one-message summary to DM `6348453236` (never to the group):
+Always send a one-message summary to DM `<YOUR_TELEGRAM_DM_CHAT_ID>` (never to the group):
 
 ```
 aictrl-crm-refresh — <UTC timestamp>
@@ -170,7 +170,7 @@ Contacts pulled (H1/H2/H3): <N1>/<N2>/<N3> = <total>
 Upserted: <U>  Backfilled: <B>  New rows: <NEW>
 Lead credit delta: <LEAD_DELTA> (balance <num_credits_remaining>)
 Dry-run: <yes/no>
-Log: https://docs.google.com/spreadsheets/d/1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ/edit
+Log: https://docs.google.com/spreadsheets/d/<YOUR_CRM_SPREADSHEET_ID>/edit
 ```
 
 **Print the summary to stdout and STOP. Do not deliver it yourself.** The cron wrapper reads stdout and delivers via `tg-send.py` under the correct bot; it is the sole sender. The sheet remains the authoritative record either way.

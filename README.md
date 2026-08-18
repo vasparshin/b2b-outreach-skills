@@ -57,9 +57,9 @@ In **`scripts/aictrl-sheets.py`**:
 
 In **`crons/*.sh`**:
 - All `/home/vas/...` paths → your home/project paths.
-- `CHAT_ID="6348453236"` → **your** Telegram DM chat_id.
+- `CHAT_ID="<YOUR_TELEGRAM_DM_CHAT_ID>"` → **your** Telegram DM chat_id.
 - `"Vas Parshin"` sender label (connect cron) → your name.
-- The MS365 sender (email cron prompt, `vas@aictrl.dev`) → your aictrl address.
+- The MS365 sender (email cron prompt, `<YOUR_SENDING_MAILBOX>`) → your aictrl address.
 
 Prereqs (your own accounts): LinkedIn MCP (`uvx linkedin-scraper-mcp@latest --login`), Apollo MCP, MS365 (`@softeria/ms-365-mcp-server`), Google Workspace MCP, Firecrawl.
 

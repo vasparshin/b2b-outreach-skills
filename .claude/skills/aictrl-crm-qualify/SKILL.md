@@ -1,6 +1,6 @@
 ---
 name: aictrl-crm-qualify
-description: Score every aictrl CRM contact on fit + engagement and write a letter grade (A / B / C / D) into col O ("Our Grade"). Reads the Log tab in spreadsheet 1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ, runs a rule-based grading pass on title / company / sequence state, and writes col O only for rows where O is currently blank. NEVER touches Apollo cols A–N + P–Q (refresh-owned), R–V (outreach-owned), or W–Z (tracker-owned). NEVER posts to the Telegram group (-5110011669) — operator updates go to DM 6348453236 only. TRIGGER on `/aictrl-crm-qualify`, "grade the CRM", "qualify contacts", "score the leads", "run the qualifier". SKIP for one-off contact scoring of named individuals, CRM refresh (use aictrl-crm-refresh), LinkedIn outreach (use aictrl-linkedin-outreach), or status tracking (use aictrl-linkedin-status-tracker).
+description: Score every aictrl CRM contact on fit + engagement and write a letter grade (A / B / C / D) into col O ("Our Grade"). Reads the Log tab in spreadsheet <YOUR_CRM_SPREADSHEET_ID>, runs a rule-based grading pass on title / company / sequence state, and writes col O only for rows where O is currently blank. NEVER touches Apollo cols A–N + P–Q (refresh-owned), R–V (outreach-owned), or W–Z (tracker-owned). NEVER posts to the Telegram group (<YOUR_TEAM_GROUP_CHAT_ID>) — operator updates go to DM <YOUR_TELEGRAM_DM_CHAT_ID> only. TRIGGER on `/aictrl-crm-qualify`, "grade the CRM", "qualify contacts", "score the leads", "run the qualifier". SKIP for one-off contact scoring of named individuals, CRM refresh (use aictrl-crm-refresh), LinkedIn outreach (use aictrl-linkedin-outreach), or status tracking (use aictrl-linkedin-status-tracker).
 ---
 
 # aictrl CRM Qualifier
@@ -11,10 +11,10 @@ Grades each contact in the master CRM `Log` tab on H1 fit + engagement, writing 
 
 | Thing | Value |
 |---|---|
-| Spreadsheet ID | `1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ` |
+| Spreadsheet ID | `<YOUR_CRM_SPREADSHEET_ID>` |
 | Sheet tab | `Log` |
-| GWS account | `Info@boller.store` |
-| Telegram DM chat_id | `6348453236` (NEVER `-5110011669`) |
+| GWS account | `<YOUR_GWS_ACCOUNT_EMAIL>` |
+| Telegram DM chat_id | `<YOUR_TELEGRAM_DM_CHAT_ID>` (NEVER `<YOUR_TEAM_GROUP_CHAT_ID>`) |
 | Token env file | `/home/vas/projects/aictrl/.telegram/.env` |
 | Default mode | rule-based only (no API calls) |
 | LLM tiebreaker | optional, off by default; enable with `--with-llm` |
@@ -114,7 +114,7 @@ Verify the spreadsheet is reachable and the header row matches the 26-col schema
 **Do NOT window — use the REST route (changed 2026-08-03).** Windowing is correct but expensive: ~60 tool calls for this sheet, each dragging the whole conversation context along. Measured fleet-wide the same day, one skill doing this burned 1.28bn cache-read tokens and 48% of a day's spend. Instead call the shared reader, which does one `GET` against the Sheets REST API with the same user OAuth credentials the MCP already uses:
 
 ```
-python3 ~/.claude/scripts/sheets-read.py 1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ 'Log!A2:Z3100' info@boller.store --json
+python3 ~/.claude/scripts/sheets-read.py <YOUR_CRM_SPREADSHEET_ID> 'Log!A2:Z3100' <your_gws_account_email> --json
 ```
 
 **Pass `--json` (or `--plain`), never the bare default, for anything doing field-position logic.** The default output prefixes each line with a row number, which shifts every column one field right — so a naive `cut -f2` returns column A, not column B. The account argument is required; omitting it exits 2 rather than silently reading a different account's sheet.
@@ -180,7 +180,7 @@ Collect all `(row_number, grade)` pairs. Write to col O via `batchUpdate`:
 
 ### 8. DM summary
 
-POST to DM `6348453236` (NEVER the group):
+POST to DM `<YOUR_TELEGRAM_DM_CHAT_ID>` (NEVER the group):
 
 ```
 aictrl-crm-qualify — <UTC date>
@@ -188,7 +188,7 @@ Rows graded: <N>  (skipped: <SKIPPED>)
 Distribution: A=<N>  B=<N>  C=<N>  D=<N>
 LLM tiebreakers: <N>  (disagreements logged: <N>)
 Dry-run: <yes/no>
-Log: https://docs.google.com/spreadsheets/d/1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ/edit
+Log: https://docs.google.com/spreadsheets/d/<YOUR_CRM_SPREADSHEET_ID>/edit
 ```
 
 Treat curl failure as non-fatal.

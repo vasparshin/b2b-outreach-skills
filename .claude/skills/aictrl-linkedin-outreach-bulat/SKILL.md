@@ -1,6 +1,6 @@
 ---
 name: aictrl-linkedin-outreach-bulat
-description: Daily autonomous LinkedIn InMail outreach batch for the aictrl pipeline — BULAT'S FORK, running under Bulat's own LinkedIn account/session (Premium, InMail-capable) and his own Apollo user_id, sharing the same CRM (Log tab) as Vas's aictrl-linkedin-outreach skill. Unlike Vas's connect-first flow, Bulat's flow is research → draft → operator approval → send a personalised InMail directly to H1 candidates scoped to him (col AO empty), with NO wait-for-acceptance gate — Premium InMail lets him message people he isn't connected to yet. Also fires a best-effort plain connect request (no note) alongside the InMail so the relationship can grow into a 1st-degree connection over time, reusing the existing shared R–V/W–X columns for that. NEVER touches Apollo cols A–Q. NEVER posts to the Telegram group (-5110011669). REQUIRES a working LinkedIn MCP server configured against Bulat's own authenticated Premium profile — do not run until that exists (see "Setup required before first run"). TRIGGER when Bulat (or someone running this on his behalf) types `/aictrl-linkedin-outreach-bulat`, says "run Bulat's daily aictrl LinkedIn batch", or when invoked by Bulat's own scheduled cron run. SKIP for Vas's own batch (use aictrl-linkedin-outreach), one-off connects to a named individual, or work on other projects.
+description: Daily autonomous LinkedIn InMail outreach batch for the aictrl pipeline — BULAT'S FORK, running under Bulat's own LinkedIn account/session (Premium, InMail-capable) and his own Apollo user_id, sharing the same CRM (Log tab) as Vas's aictrl-linkedin-outreach skill. Unlike Vas's connect-first flow, Bulat's flow is research → draft → operator approval → send a personalised InMail directly to H1 candidates scoped to him (col AO empty), with NO wait-for-acceptance gate — Premium InMail lets him message people he isn't connected to yet. Also fires a best-effort plain connect request (no note) alongside the InMail so the relationship can grow into a 1st-degree connection over time, reusing the existing shared R–V/W–X columns for that. NEVER touches Apollo cols A–Q. NEVER posts to the Telegram group (<YOUR_TEAM_GROUP_CHAT_ID>). REQUIRES a working LinkedIn MCP server configured against Bulat's own authenticated Premium profile — do not run until that exists (see "Setup required before first run"). TRIGGER when Bulat (or someone running this on his behalf) types `/aictrl-linkedin-outreach-bulat`, says "run Bulat's daily aictrl LinkedIn batch", or when invoked by Bulat's own scheduled cron run. SKIP for Vas's own batch (use aictrl-linkedin-outreach), one-off connects to a named individual, or work on other projects.
 ---
 
 # aictrl Daily LinkedIn InMail Outreach Batch — Bulat's Fork
@@ -69,14 +69,14 @@ Same split as `aictrl-linkedin-followup`, reused directly here (2026-07-24 chang
 
 | Thing | Value |
 |---|---|
-| Required Apollo account email | **[BULAT]** placeholder — confirm with Bulat, NOT `vasparshin@gmail.com` |
+| Required Apollo account email | **[BULAT]** placeholder — confirm with Bulat, NOT `<YOUR_APOLLO_ACCOUNT_EMAIL>` |
 | Required Apollo user_id | captured automatically at Step 1 |
 | Target Apollo sequence column value | `H1 — Security/Data Risk` (substring match on col K) |
-| Outreach log spreadsheet_id | `1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ` — same shared sheet |
+| Outreach log spreadsheet_id | `<YOUR_CRM_SPREADSHEET_ID>` — same shared sheet |
 | Sheet tab | `Log` |
-| GWS account | `Info@boller.store` — **[BULAT]** confirm Bulat's environment has write access |
+| GWS account | `<YOUR_GWS_ACCOUNT_EMAIL>` — **[BULAT]** confirm Bulat's environment has write access |
 | Daily cap (per run) | **10** — lower than Vas's 15, since each row here also costs a research pass + an approval round-trip, not just a bare connect click |
-| Telegram DM chat_id | **[BULAT]** placeholder — needs Bulat's own chat_id; do NOT reuse Vas's `6348453236` |
+| Telegram DM chat_id | **[BULAT]** placeholder — needs Bulat's own chat_id; do NOT reuse Vas's `<YOUR_TELEGRAM_DM_CHAT_ID>` |
 | Sender name to log (col U, connect fold-in) | **[BULAT]** placeholder — confirm exact string |
 | Mode | **approve-before-send**, same as Vas's `aictrl-linkedin-followup` — do not flip to auto-send unilaterally |
 
@@ -90,7 +90,7 @@ Identical to the prior fork's Steps 2–3: call `apollo_users_api_profile`, veri
 
 Same thin-index-then-hydrate pattern as the other skills (never a full `A:Z` read on 3,000+ rows).
 
-**Truncation gotcha — read these in `<=50`-row windows, NOT as single ranges (fixed 2026-07-31).** `read_sheet_values` silently truncates its returned content to the first 50 data rows of any range, regardless of range size or the row count it reports. Narrowing to one column does NOT help — the limit is on rows, not width. **Superseded 2026-08-03 — do NOT window, use the REST route.** Windowing is correct but costs ~60 tool calls per column, each carrying the whole conversation context (fleet measurement that day: 1.28bn cache-read tokens and 48% of a day's spend from exactly this pattern). Call the shared reader once for all four columns at once and filter in Python: `python3 ~/.claude/scripts/sheets-read.py 1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ 'Log!A2:AO3100' info@boller.store --json` — verified against this spreadsheet, 3,035 rows in one call, no truncation, and a non-zero exit means "could not read" rather than "empty". Legacy fallback only if the script is unavailable: loop `Log!H<start>:H<start+49>` for `start = 2, 52, 102, ...` up through the sheet's last row and accumulate, and the same for `K`, `O` and `AO`. This step previously specified `Log!H2:H10000`, `Log!K2:K10000`, `Log!O2:O10000` and `Log!AO2:AO10000` as single calls, which meant it only ever saw sheet rows 2–51 — about 1.6% of a 3,000-row CRM — while appearing to have scanned everything. The fleet-wide fix on 2026-07-27 was applied to Vas's skills but this fork was missed; see `~/.claude/context/mcps.md`.
+**Truncation gotcha — read these in `<=50`-row windows, NOT as single ranges (fixed 2026-07-31).** `read_sheet_values` silently truncates its returned content to the first 50 data rows of any range, regardless of range size or the row count it reports. Narrowing to one column does NOT help — the limit is on rows, not width. **Superseded 2026-08-03 — do NOT window, use the REST route.** Windowing is correct but costs ~60 tool calls per column, each carrying the whole conversation context (fleet measurement that day: 1.28bn cache-read tokens and 48% of a day's spend from exactly this pattern). Call the shared reader once for all four columns at once and filter in Python: `python3 ~/.claude/scripts/sheets-read.py <YOUR_CRM_SPREADSHEET_ID> 'Log!A2:AO3100' <your_gws_account_email> --json` — verified against this spreadsheet, 3,035 rows in one call, no truncation, and a non-zero exit means "could not read" rather than "empty". Legacy fallback only if the script is unavailable: loop `Log!H<start>:H<start+49>` for `start = 2, 52, 102, ...` up through the sheet's last row and accumulate, and the same for `K`, `O` and `AO`. This step previously specified `Log!H2:H10000`, `Log!K2:K10000`, `Log!O2:O10000` and `Log!AO2:AO10000` as single calls, which meant it only ever saw sheet rows 2–51 — about 1.6% of a 3,000-row CRM — while appearing to have scanned everything. The fleet-wide fix on 2026-07-27 was applied to Vas's skills but this fork was missed; see `~/.claude/context/mcps.md`.
 
 Read the four thin index columns: `H` (slug), `K` (sequence), `O` (grade), `AO` (this skill's own gate column — the InMail dedup key, NOT col R). Filter to rows where col H is non-empty, **col AO is empty** (not yet InMail'd by this skill), col K contains `H1 — Security/Data Risk` (matches the Constants target above — do not broaden to H2/H3/blank without updating that line too), and Apollo-task scoping (see prior fork's Step 4) confirms the row belongs to Bulat's Apollo user_id. Prioritize Grade A then B then ungraded. Take top 10, hydrate only matched rows (name, title, company, slug, apollo_contact_id).
 
@@ -163,7 +163,7 @@ InMail skipped (not messageable): <N>
 InMail errors: <N>
 Connect fold-in sent: <N> / already connected: <N>
 Total attempts: <N>/10
-Log: https://docs.google.com/spreadsheets/d/1PQ1oaJPVs3GvWQMk9RBjlef-jcPdISswdD4zGv7QqRQ/edit
+Log: https://docs.google.com/spreadsheets/d/<YOUR_CRM_SPREADSHEET_ID>/edit
 ```
 
 ### 11. Do NOT post to Telegram yourself outside the approval step
