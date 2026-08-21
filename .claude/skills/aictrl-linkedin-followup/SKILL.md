@@ -1,6 +1,6 @@
 ---
 name: aictrl-linkedin-followup
-description: Research, ICP-check, draft, and send a personalised follow-up LinkedIn DM for an accepted aictrl connection. Called by aictrl-linkedin-status-tracker on first-detected accept, or invoked manually. Flow: ICP gate → post scrape → Apollo enrichment → draft in aictrl voice → self-vet → send (auto-send since 2026-08-03). TRIGGER on "send follow-up to [name]", "run followup for [slug]", "personalised message for [name]", or when called by the tracker skill. SKIP for initial connection requests (use aictrl-linkedin-outreach) or acceptance polling (use aictrl-linkedin-status-tracker).
+description: "'Research, ICP-check, draft, and send a personalised follow-up LinkedIn DM for an accepted aictrl connection. Called by aictrl-linkedin-status-tracker on first-detected accept, or invoked manually. Flow: ICP gate → post scrape → Apollo enrichment → draft in aictrl voice → self-vet → send (auto-send since 2026-08-03). TRIGGER on 'send follow-up to [name]', 'run followup for [slug]', 'personalised message for [name]', or when called by the tracker skill. SKIP for initial connection requests (use aictrl-linkedin-outreach) or acceptance polling (use aictrl-linkedin-status-tracker).'"
 ---
 
 # aictrl LinkedIn Follow-up

@@ -1,3 +1,8 @@
+---
+name: aictrl-prospector
+description: "Keeps the CRM's connect pipeline topped up. Finds new ICP-matched transformation-buyer contacts via Apollo, dedupes against the existing CRM, enriches, imports, and grades them, so the daily LinkedIn connect cron never runs dry. TRIGGER when the eligible pool drops below a threshold, on a scheduled prospecting cron run, or 'top up the prospect pool'. SKIP for grading an existing contact (use the qualifier) or one-off individual research (use prospect-research)."
+---
+
 # aictrl Prospector
 
 Keeps the CRM's connect pipeline topped up. Finds new ICP-matched UK transformation-buyer contacts via Apollo, dedupes against the existing CRM, enriches, imports, and grades them — so the daily LinkedIn connect cron (aictrl-linkedin-cron.sh) never runs dry.

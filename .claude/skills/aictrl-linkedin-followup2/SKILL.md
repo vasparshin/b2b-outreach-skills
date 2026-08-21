@@ -1,3 +1,8 @@
+---
+name: aictrl-linkedin-followup2
+description: "Daily skill that nudges accepted LinkedIn connections who got a first-touch follow-up message (via aictrl-linkedin-followup) but never replied. TRIGGER on a scheduled second-touch cron run, or 'nudge unanswered LinkedIn follow-ups'. SKIP for a first-touch follow-up (use aictrl-linkedin-followup) or initial connection requests (use aictrl-linkedin-outreach)."
+---
+
 # aictrl LinkedIn Second-Touch Follow-up
 
 Daily skill that nudges accepted LinkedIn connections who got a first-touch follow-up message (via `aictrl-linkedin-followup`) but never replied. Built 2026-07-07 per Vas: most of the follow-ups sent over the last ~2 months got zero replies, and nothing was re-touching them.
